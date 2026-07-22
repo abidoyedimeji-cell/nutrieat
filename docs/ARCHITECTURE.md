@@ -1,335 +1,352 @@
-# NutriEat — MVP Architecture
+# NutriEat — Technical Architecture
 
-This is the design spec for the Phase 1 MVP. It refines the original plan with the
-corrections needed before any migrations are written: **Row Level Security**, a
-**pence-based money model**, a **webhook-authoritative order flow**, and a small
-**shopping-links** layer that lets the grocery feature grow in later without a schema
-rewrite.
+Full technical design for the platform. Product/launch context is in
+[`PRODUCT-AND-LAUNCH.md`](./PRODUCT-AND-LAUNCH.md); the grocery feature in
+[`SHOPPING-INTEGRATION.md`](./SHOPPING-INTEGRATION.md); scope/phasing/decisions in
+[`ROADMAP.md`](./ROADMAP.md).
 
-> No application code exists yet. SQL and route sketches below are the design, not
-> shipped files. When we build, migrations go in `supabase/migrations/` and the app in
-> a Next.js App Router tree.
+> No application code exists yet. SQL and route sketches are the design, not shipped
+> files. When we build: migrations in `supabase/migrations/`, app in a Next.js App Router
+> tree.
+
+**Money convention:** all amounts are integer **minor units** in a `*_cents` column paired
+with an explicit `currency` column (ISO-4217). This keeps the app currency-neutral while
+the USD-vs-GBP decision is open (see ROADMAP §Decisions) and avoids float bugs. *(This
+supersedes the earlier draft's `price_pence`; same idea, but currency is now explicit
+rather than baked into the column name.)*
 
 ---
 
 ## 1. Route map
 
-### Public (Phase 1)
+### Public
 
 ```
-/                        Landing page + early-access CTA
-/early-access            Email capture form
-/survey                  Audience survey (multi-question)
-/cookbook                Cookbook product page
-/cookbook/pre-order      Pre-order CTA → Stripe checkout
-/checkout/success        Post-payment landing (thanks; confirmation is by webhook)
-/checkout/cancelled      Abandoned/cancelled checkout
-/blog                    Blog index
-/blog/[slug]             Blog article
-/recipes-preview         Recipe-preview index
-/recipes-preview/[slug]  Recipe preview detail
-/terms                   Terms
-/privacy                 Privacy
-/sitemap.xml             Generated (app/sitemap.ts)
-/robots.txt              Generated (app/robots.ts)
+/                      Landing
+/cookbook              Product / editions page
+/early-access          Email capture
+/survey                Survey (Google Form embed in MVP; native later)
+/recipes               Recipe-preview index
+/recipes/[slug]        Recipe preview detail
+/meal-plans            Meal-plan index
+/blog                  Blog index
+/blog/[slug]           Blog article
+/checkout/success      Post-payment landing (cosmetic; webhook is authoritative)
+/checkout/cancelled    Abandoned/cancelled checkout
+/about  /faq  /contact
+/privacy  /terms  /refund-policy
+/sitemap.xml           app/sitemap.ts (published content + static routes)
+/robots.txt            app/robots.ts
 ```
 
-### Protected (Phase 2 — not built in MVP)
+### Protected customer (introduced when accounts are needed — Phase 6)
 
 ```
 /account
 /account/orders
 /account/downloads
+/account/profile
+/account/saved-recipes
+```
+
+### Future shopping (Phase 7+)
+
+```
+/shop
+/shop/ingredients
+/shop/recipes/[slug]
+/shop/meal-plans/[slug]
+/shop/supermarkets
+/shop/lists/[id]
 ```
 
 ---
 
-## 2. Data model
+## 2. Stack
 
-Conventions:
-
-- **Money is stored in integer pence** (`price_pence`), never pounds/floats. £24.99 = `2499`.
-  (The original plan named these `*_gbp`; renaming to `*_pence` removes the "is this
-  pounds or pence?" ambiguity.)
-- Every table has RLS **enabled**. Default posture: **deny all**. Public access is granted
-  only where explicitly stated. All public *writes* go through `SECURITY DEFINER` RPCs —
-  the browser client never inserts directly.
-- Timestamps are `timestamptz default now()`.
-
-### Enums
-
-```sql
-create type product_status as enum ('draft', 'active', 'archived');
-create type order_status   as enum ('pending', 'paid', 'failed', 'refunded');
-create type lead_source    as enum ('early_access', 'survey', 'pre_order', 'blog', 'social');
-create type content_status as enum ('draft', 'published', 'archived');
-```
-
-### `profiles` (Phase 2, defined now for FK stability)
-
-```sql
-create table profiles (
-  id         uuid primary key references auth.users(id) on delete cascade,
-  email      text not null,
-  full_name  text,
-  created_at timestamptz default now()
-);
-```
-
-RLS: a user can `select`/`update` only `where id = auth.uid()`. No public access.
-
-### `cookbook_leads`
-
-```sql
-create table cookbook_leads (
-  id            uuid primary key default gen_random_uuid(),
-  email         text not null unique,
-  full_name     text,
-  source        lead_source default 'early_access',
-  wants_updates boolean default true,
-  created_at    timestamptz default now()
-);
-```
-
-RLS: **no public policies.** Reachable only via the `create_cookbook_lead` RPC and
-service-role. Emails are stored lowercased by the RPC.
-
-### `cookbook_survey_responses`
-
-```sql
-create table cookbook_survey_responses (
-  id                         uuid primary key default gen_random_uuid(),
-  lead_id                    uuid references cookbook_leads(id) on delete set null,
-  email                      text,
-  reason_for_joining         text,
-  relationship_with_food     text,
-  desired_change             text,
-  priority_areas             text[],
-  food_choice_influences     text,
-  premium_value_expectation  text,
-  involvement_level          text,
-  future_vision              text,
-  trust_driver               text,
-  open_ideas                 text,
-  created_at                 timestamptz default now()
-);
-```
-
-RLS: no public policies. Written only via `submit_cookbook_survey`.
-
-### `cookbook_products`
-
-```sql
-create table cookbook_products (
-  id                uuid primary key default gen_random_uuid(),
-  title             text not null,
-  slug              text not null unique,
-  description       text,
-  short_description text,
-  status            product_status default 'draft',
-  price_pence       integer not null,
-  sale_price_pence  integer,
-  cover_image_url   text,
-  format            text default 'digital',
-  launch_date       date,
-  created_at        timestamptz default now()
-);
-```
-
-RLS: public `select` **only** `where status = 'active'`. No public writes.
-
-### `cookbook_orders`
-
-```sql
-create table cookbook_orders (
-  id                         uuid primary key default gen_random_uuid(),
-  user_id                    uuid references auth.users(id) on delete set null,
-  product_id                 uuid not null references cookbook_products(id) on delete restrict,
-  email                      text not null,
-  status                     order_status default 'pending',
-  amount_pence               integer not null,
-  stripe_checkout_session_id text unique,
-  stripe_payment_intent_id   text,
-  created_at                 timestamptz default now(),
-  paid_at                    timestamptz
-);
-```
-
-RLS: **no public policies at all.** Orders are created and mutated exclusively by
-server-side code using the service-role key (checkout route + webhook). In Phase 2,
-add a `select` policy `where user_id = auth.uid()` for the account/orders page.
-
-`on delete restrict` on `product_id` guarantees we never orphan an order from its product.
-
-### `blog_posts`
-
-```sql
-create table blog_posts (
-  id              uuid primary key default gen_random_uuid(),
-  title           text not null,
-  slug            text not null unique,
-  excerpt         text,
-  body            text,
-  cover_image_url text,
-  status          content_status default 'draft',
-  seo_title       text,
-  seo_description text,
-  published_at    timestamptz,
-  created_at      timestamptz default now()
-);
-```
-
-RLS: public `select` **only** `where status = 'published'`.
-
-### `recipe_previews`
-
-```sql
-create table recipe_previews (
-  id             uuid primary key default gen_random_uuid(),
-  title          text not null,
-  slug           text not null unique,
-  excerpt        text,
-  ingredients    text[],
-  method_preview text,
-  nutrition_focus text,
-  image_url      text,
-  status         content_status default 'draft',
-  created_at     timestamptz default now()
-);
-```
-
-RLS: public `select` **only** `where status = 'published'`.
-
-### Shopping layer (design now, build in Phase 3)
-
-Two small tables let the shopping assistant grow without touching recipes. See
-[`SHOPPING-INTEGRATION.md`](./SHOPPING-INTEGRATION.md) for the full rationale.
-
-```sql
--- Canonical ingredients, decoupled from any single recipe's free-text list.
-create table ingredients (
-  id            uuid primary key default gen_random_uuid(),
-  name          text not null unique,
-  category      text,                 -- meat, grain, produce, dairy, pantry...
-  default_unit  text,                 -- g, ml, unit
-  swap_of       uuid references ingredients(id) on delete set null, -- e.g. tofu swaps chicken
-  tags          text[],               -- high-protein, halal-option, budget, vegan...
-  created_at    timestamptz default now()
-);
-
--- Per-retailer affiliate deep-link for an ingredient. One row per (ingredient, retailer).
-create table shopping_links (
-  id             uuid primary key default gen_random_uuid(),
-  ingredient_id  uuid not null references ingredients(id) on delete cascade,
-  retailer       text not null,       -- tesco, sainsburys, ocado, iceland, waitrose...
-  search_url     text not null,       -- affiliate-wrapped search/product URL
-  est_price_pence integer,            -- optional cached estimate, refreshed periodically
-  pack_size      text,                -- "650g", "6 pack"
-  updated_at     timestamptz default now(),
-  unique (ingredient_id, retailer)
-);
-```
-
-RLS: both public `select` (all rows readable — it's a catalogue). Writes are admin/
-service-role only.
+- **Front end:** Next.js (App Router) · React · TypeScript · Tailwind CSS.
+- **Back end:** Supabase Postgres · Supabase Auth · Supabase Storage · RLS · Postgres
+  functions/RPCs.
+- **Payments:** Stripe Checkout · webhooks · promotion codes / dedicated Price IDs ·
+  Stripe customers where needed.
+- **Deploy:** Vercel (app) · Supabase (db/auth/storage).
+- **Email:** transactional + marketing provider connected later (see PRODUCT §10).
 
 ---
 
-## 3. RPCs (public write surface)
+## 3. Database domains
 
-Only two functions are exposed to the anon client. Both are `SECURITY DEFINER`, so they
-insert into RLS-locked tables on the caller's behalf while the tables stay closed to
-direct writes.
-
-### `create_cookbook_lead(p_email, p_full_name, p_source) → uuid`
-
-Upserts a lead on `email` conflict, re-enabling `wants_updates`. Lowercases the email.
-Called by `/api/leads/create` and (indirectly) the survey.
-
-### `submit_cookbook_survey(...) → uuid`
-
-Finds-or-creates the lead by email (source `'survey'` when new), then inserts the survey
-response linked to that lead. Returns the response id. Called by `/api/survey/submit`.
-
-> Both functions as sketched in the original plan are correct. The only additions: ensure
-> `search_path` is pinned (`set search_path = public`) inside each `SECURITY DEFINER`
-> function to avoid search-path hijacking, and `grant execute` to `anon, authenticated`.
+- **Identity:** profiles, user preferences, marketing consent.
+- **Early access:** leads, lead sources, campaign attribution, survey responses.
+- **Commerce:** products, product variants, prices, discounts, orders, order items,
+  payment events, download entitlements.
+- **Cookbook content:** recipes, recipe categories, ingredients, recipe ingredients,
+  ingredient substitutions, meal plans, meal-plan recipes, nutrition data.
+- **Publishing:** blog posts, categories, tags, authors, SEO metadata.
+- **Future grocery:** retailers, retailer products, ingredient↔product matches, prices,
+  availability, shopping lists, shopping-list items.
 
 ---
 
-## 4. API routes (Next.js Route Handlers)
+## 4. Enums
+
+Use enums only where values are stable and controlled.
 
 ```
-POST /api/leads/create        → calls create_cookbook_lead RPC
-POST /api/survey/submit       → calls submit_cookbook_survey RPC
-POST /api/stripe/create-checkout
-POST /api/stripe/webhook      → Stripe signature-verified; the ONLY writer of order status
+product_status     : draft | active | archived
+product_type       : physical_book | pdf | bundle
+order_status       : pending | paid | payment_failed | cancelled | refunded | partially_refunded | fulfilled
+fulfilment_status  : not_required | pending | processing | shipped | delivered | failed | returned
+content_status     : draft | scheduled | published | archived
+lead_source        : homepage | early_access | survey | blog | recipe | instagram | facebook | youtube | email | qr_code | referral | other
+involvement_level  : observer | feedback | voter | recipe_tester | contributor | high_involvement
 ```
 
-Two Supabase clients:
-
-- **Browser/anon client** — used by public reads and RPC calls. Bound by RLS.
-- **Service-role client** — server-only, used by the checkout + webhook routes to write
-  `cookbook_orders`. Never imported into a client component.
+**Recipe categories are rows, not an enum** (they expand): Breakfast, Lunch, Smoothie,
+Superfood, Performance meal, Snack, Meal prep, High-protein, High-fat, Low-fat,
+Low-carbohydrate, …
 
 ---
 
-## 5. Stripe flow (webhook is authoritative)
+## 5. Core schema
+
+RLS conventions: **enabled on every table, deny-by-default.** Public access is granted
+only where stated. Public *writes* go exclusively through `SECURITY DEFINER` RPCs (§6);
+the browser never writes commerce/content status. Timestamps `timestamptz default now()`.
+
+### Identity
+
+- **profiles** — `id (→auth.users)`, `email`, `full_name`, `created_at`, `updated_at`.
+  Preferences + `marketing_consent` live here or in a linked `user_preferences` row.
+  RLS: owner-only `select`/limited `update` (`id = auth.uid()`).
+
+### Early access
+
+- **cookbook_leads** — `id`, `email (unique, lowercased)`, `full_name`, `source
+  (lead_source)`, `marketing_consent`, `preferred_format`, `involvement_level`,
+  `completed_survey (bool)`, attribution (`utm_source/medium/campaign/content/term`,
+  `landing_page`, `referrer`), `created_at`.
+  RLS: no public policies — write only via `create_cookbook_lead`.
+- **survey_responses** — `id`, `lead_id (→cookbook_leads on delete set null)`, the
+  quantitative + qualitative answers (structured columns and/or `jsonb`), `submitted_at`.
+  RLS: no public policies — write only via `submit_cookbook_survey`.
+
+### Commerce
+
+- **products** — `id`, `title`, `slug (unique)`, `description`, `status (product_status)`,
+  `cover_image`, `launch_date`, `created_at`. RLS: public `select where status='active'`.
+- **product_variants** — `id`, `product_id`, `variant_type (product_type)`, `sku`,
+  `price_cents`, `currency`, `stripe_price_id`, `inventory_tracking (bool)`, `active`.
+  Separates Hardback / PDF / Bundle. RLS: public read of active variants.
+- **orders** — `id`, `user_id (→auth.users, nullable — guest checkout)`, `customer_email`,
+  `status (order_status)`, `currency`, `subtotal_cents`, `discount_cents`, `total_cents`,
+  `stripe_checkout_session_id (unique)`, `stripe_payment_intent_id`,
+  `fulfilment_status (fulfilment_status)`, shipping fields (physical), `paid_at`,
+  `created_at`. RLS: **no public policies**; server-only writes. Phase 6 adds owner
+  `select` (`user_id = auth.uid()`).
+- **order_items** — `id`, `order_id`, `product_variant_id`, `quantity`, `unit_price_cents`,
+  `total_cents`. RLS: via parent order.
+- **payment_events** — `id`, `stripe_event_id (unique)`, `event_type`, `processed_at`,
+  `payload_reference`. The idempotency ledger — a webhook checks/inserts here before
+  acting. RLS: service-role only.
+- **download_entitlements** — `id`, `order_item_id`, `user_id (nullable)`,
+  `customer_email`, `file_path`, `download_limit`, `download_count`, `expires_at`,
+  `active`. RLS: owner-only read once accounts exist; issuance server-only.
+
+### Cookbook content
+
+- **recipes** — `id`, `title`, `slug (unique)`, `summary`, `instructions`, `servings`,
+  `preparation_time`, `cooking_time`, `calories`, `protein_grams`, `carbohydrate_grams`,
+  `fat_grams`, `visibility (public_preview | cookbook_only)`, `content_status`.
+  RLS: public `select` only where `content_status='published' AND visibility='public_preview'`
+  — **paid cookbook content is never publicly rendered or sitemapped.**
+- **ingredients** — `id`, `canonical_name (unique)`, `category`, `unit_type`,
+  `description`, `dietary_tags (text[])`. The reusable ingredient library (grocery
+  foundation). RLS: public read.
+- **recipe_ingredients** — `recipe_id`, `ingredient_id`, `quantity`, `unit`,
+  `preparation_note`, `optional`, `sort_order`.
+- **ingredient_substitutions** — `ingredient_id`, `substitute_ingredient_id`,
+  `substitution_ratio`, `reason`, `nutritional_difference`, `priority`.
+- **meal_plans** — `id`, `title`, `slug (unique)`, `description`, `number_of_days`,
+  `goal`, `status (content_status)`.
+- **meal_plan_recipes** — `meal_plan_id`, `recipe_id`, `day_number`, `meal_slot`,
+  `rotation_group`.
+
+### Publishing
+
+- **blog_posts** — `id`, `title`, `slug (unique)`, `excerpt`, `body`, `status
+  (content_status)`, `seo_title`, `seo_description`, `canonical_url`, `cover_image`,
+  `published_at`. Plus `blog_categories`, `blog_tags`, `authors`. RLS: public `select
+  where status='published'`.
+
+### Future grocery
+
+`retailers`, `retailer_products`, `ingredient_product_matches`, `prices`, `availability`,
+`shopping_lists`, `shopping_list_items` — see [`SHOPPING-INTEGRATION.md`](./SHOPPING-INTEGRATION.md).
+
+---
+
+## 6. RPCs
+
+RPCs guard multi-step operations and keep business logic server-side. Public ones are
+`SECURITY DEFINER` with pinned `search_path = public` and `execute` granted to
+`anon, authenticated`.
+
+- **create_cookbook_lead** — normalise email, create-or-update lead, preserve original
+  source, record consent, avoid duplicates.
+- **submit_cookbook_survey** — find-or-create lead, store response, mark lead as surveyed,
+  prevent accidental duplicate submissions where required.
+- **create_pending_order** — validate the selected variant, **read the price from the DB**
+  (never trust the browser), apply eligible discount, create a `pending` order, return the
+  order id.
+- **confirm_paid_order** — *server/webhook-only.* Confirm the Stripe session, validate
+  amount + currency, mark order `paid`, create order items, create PDF download
+  entitlement, prevent duplicate processing.
+- **redeem_download** — validate entitlement, confirm remaining allowance, increment
+  download count, return permission to generate a signed URL.
+- **get_public_recipe** — return only published, public recipe info; exclude
+  cookbook-only content.
+- **get_shopping_list_for_recipe** *(future)* — aggregate recipe ingredients, normalise
+  quantities, include approved substitutions, return retailer-matching inputs.
+- **get_shopping_list_for_meal_plan** *(future)* — combine ingredients across recipes,
+  merge duplicates, total quantities, preserve recipe references.
+
+---
+
+## 7. API routes & server actions
 
 ```
-User clicks Pre-order
-  → POST /api/stripe/create-checkout
-      → insert cookbook_orders row (status = 'pending', amount_pence from product)
+POST /api/leads                     → create_cookbook_lead
+POST /api/surveys                   → submit_cookbook_survey
+POST /api/checkout/create           → create_pending_order + Stripe Checkout Session
+POST /api/stripe/webhook            → signature-verified; ONLY writer of order status
+POST /api/downloads/[entitlementId] → redeem_download → signed URL
+
+# Admin (role-protected)
+POST /api/admin/products
+POST /api/admin/recipes
+POST /api/admin/blog
+POST /api/admin/meal-plans
+```
+
+Two Supabase clients: **anon** (public reads + RPC calls, bound by RLS) and
+**service-role** (server-only; writes orders/entitlements; never imported into a client
+component). Server actions are fine for internal forms, but **Stripe webhook processing
+stays in a dedicated route handler.**
+
+---
+
+## 8. Stripe flow (webhook is authoritative)
+
+**Catalogue:** Product 1 *Breakfast Superfood – Hardback*, Product 2 *… – PDF*, later
+Product 3 *… – Hardback + PDF Bundle*. Early-access discount via dedicated early-access
+Price IDs, Stripe promotion codes, or DB-controlled discounts — **the DB determines
+eligibility and selects the correct Stripe price.**
+
+```
+Cookbook page → select edition
+  → POST /api/checkout/create
+      → create_pending_order (price read from DB, discount applied)
       → create Stripe Checkout Session (client_reference_id = order.id)
-      → return session URL
-  → redirect to Stripe Checkout (hosted)
+  → redirect to Stripe (hosted)
   → user pays
-  → Stripe fires checkout.session.completed  →  POST /api/stripe/webhook
+  → Stripe → POST /api/stripe/webhook
       → verify signature (STRIPE_WEBHOOK_SECRET)
-      → look up order by stripe_checkout_session_id / client_reference_id
-      → set status = 'paid', paid_at = now(), store payment_intent id
+      → check payment_events for stripe_event_id  (idempotency)
+      → confirm_paid_order: validate amount+currency, status→paid, create order items
+      → PDF: create download entitlement   |   Physical: fulfilment_status→pending
       → send confirmation email
-  → user is redirected to /checkout/success
+  → user redirected to /checkout/success   (cosmetic only)
 ```
 
-**Rules:**
+**Webhook events handled (minimum):** `checkout.session.completed`,
+`checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
+`payment_intent.payment_failed`, `charge.refunded`.
 
-1. `/checkout/success` is cosmetic. It **never** marks an order paid — a user can reach
-   it without paying. Only the webhook flips `pending → paid`.
-2. The webhook must verify the Stripe signature and be **idempotent** (Stripe retries;
-   re-processing the same event must not double-send email or double-write).
-3. Store amounts from the product record server-side; never trust an amount sent by the
-   browser.
-4. Handle `checkout.session.expired` / failed payments → `status = 'failed'`.
-
----
-
-## 6. SEO structure
-
-- `app/sitemap.ts` generates `/sitemap.xml` from published `blog_posts`, published
-  `recipe_previews`, active `cookbook_products`, and static routes.
-- `app/robots.ts` generates `/robots.txt` (allow all; point to sitemap; disallow
-  `/api`, `/account`, `/checkout`).
-- Each blog/recipe/product page sets per-page metadata via the App Router `generateMetadata`
-  export, backed by the row's `seo_title` / `seo_description`.
-- Target indexable slugs (examples from the plan):
-  `/blog/high-protein-meal-prep`, `/blog/healthy-bulking-meals`,
-  `/blog/budget-meal-planning`, `/blog/meal-prep-for-busy-people`,
-  `/recipes-preview/chicken-rice-meal-prep`.
-
-**Blog page anatomy** (each post): SEO title + description, main article body, related
-recipe previews, and three CTAs — cookbook, early-access, pre-order.
-
-**Content categories:** meal prep · high-protein · budget meals · fitness meals ·
-family meals · healthy lifestyle · cultural food · nutrition education · cooking
-technique · shopping lists.
+**Rules:** `/checkout/success` never marks paid (reachable without paying) — only the
+webhook does. Every event is recorded in `payment_events` by `stripe_event_id` and
+processed **at most once**. Amounts come from the product record server-side, never the
+browser.
 
 ---
 
-## 7. Environment variables
+## 9. PDF delivery
 
-Nothing is provisioned yet; the app is written against these placeholders and wired up
-when Supabase/Stripe/Vercel exist.
+PDF lives in a **private** Supabase Storage bucket — never a permanent public URL.
+
+```
+Payment confirmed → entitlement created → confirmation email
+  → customer opens secure link → server validates entitlement (redeem_download)
+  → temporary signed URL generated → download_count incremented
+```
+
+Rules: max downloads, link expiry, ability to regenerate links, manual access
+restoration, watermarked PDF in a later phase.
+
+## 10. Physical fulfilment
+
+Capture shipping address, fulfilment status, shipping method, tracking number, dispatch
+confirmation, refund/return status. Initially **manual** via admin: view paid physical
+orders, export fulfilment info, mark processing → shipped → delivered, add tracking.
+
+---
+
+## 11. Edge Functions
+
+Not needed initially — Next.js route handlers cover checkout, webhook, leads, surveys,
+signed downloads. Introduce Supabase Edge Functions when logic must run independently of
+Vercel, for scheduled DB jobs, Supabase-triggered email journeys, external grocery data
+imports, or scheduled retailer-price refreshes. Likely future functions:
+`send-welcome-email`, `send-purchase-confirmation`, `generate-download-link`,
+`refresh-retailer-products`, `match-retailer-products`, `expire-download-entitlements`.
+
+## 12. Authentication
+
+**Auth is not mandatory for early-access, survey, or checkout** — requiring accounts early
+hurts conversion. MVP allows guest signup, guest survey, guest Stripe checkout, and
+email-based purchase confirmation. **After purchase**, invite the customer to create an
+account on the same email to unlock order history, PDF downloads, saved recipes, saved
+shopping lists, and exclusive content (Phase 6).
+
+## 13. Security & RLS
+
+RLS on all customer/commercial tables. **Public may:** read published products, published
+blog posts, approved recipe previews; submit early-access + survey via controlled RPCs.
+**Authenticated customers may:** read own profile/orders/order items/entitlements; update
+limited profile fields. **Admins may:** manage products, cookbook content, blog, review
+leads/surveys/orders, manage fulfilment. **The browser must never directly write:** order
+payment status, Stripe identifiers, product pricing, download counts, fulfilment status,
+published-content status.
+
+## 14. SEO
+
+Server-rendered public pages; clean descriptive URLs; unique titles + meta descriptions;
+canonical URLs; Open Graph + social images; XML sitemap; robots; structured data; internal
+linking; image alt text; fast loads; mobile-first.
+
+**Structured data:** `Book`, `Product`, `Offer`, `Recipe`, `Article`, `BreadcrumbList`,
+`FAQPage`, `Person`, `Organization`. Public recipe pages expose only indexable info —
+**protected/paid cookbook content is neither publicly rendered nor sitemapped.**
+
+Per-page metadata via App Router `generateMetadata`, backed by each row's
+`seo_title`/`seo_description`/`canonical_url`. `app/sitemap.ts` pulls published blog posts,
+public recipe previews, active products, meal plans, and static routes; `app/robots.ts`
+allows crawl, points to the sitemap, and disallows `/api`, `/account`, `/checkout`.
+
+## 15. Admin
+
+Eventually: **Content** — recipes, meal plans, ingredients, substitutions, blog. **Commerce**
+— products/variants, orders, payment status, fulfilment, refunds, restore PDF access.
+**Marketing** — leads, survey responses, export contacts, segment users, campaign sources,
+assign early-access eligibility. **Grocery (later)** — retailers, product matching, prices,
+disable dead links, review unmatched ingredients.
+
+---
+
+## 16. Environment variables
+
+Nothing is provisioned yet; the app is written against placeholders and wired up when
+Supabase/Stripe/Vercel exist.
 
 ```
 # Supabase
@@ -342,44 +359,10 @@ STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
 
-# Email (Phase 1 transactional)
+# Email (provider TBD)
 EMAIL_API_KEY=
 EMAIL_FROM=
 
 # App
 NEXT_PUBLIC_SITE_URL=
 ```
-
----
-
-## 8. Build phases
-
-### Phase 1 — MVP
-
-Landing · early-access form · survey form · cookbook product page · pre-order checkout ·
-Stripe webhook · blog index · blog detail · sitemap · robots.txt.
-
-### Phase 2
-
-User accounts (Supabase Auth) · order history · digital download access · private recipe
-previews · founder-only content. Add RLS `select` policies keyed on `auth.uid()` to
-`cookbook_orders` and `profiles`.
-
-### Phase 3
-
-Shopping assistant (ingredient → supermarket affiliate links) · meal-plan dashboard ·
-grocery partner links · subscription model. See `SHOPPING-INTEGRATION.md`.
-
----
-
-## 9. Corrections applied vs. the original plan
-
-| Area          | Change                                                                       |
-| ------------- | ---------------------------------------------------------------------------- |
-| Money         | `*_gbp` → `*_pence` integers, explicitly pence.                              |
-| RLS           | Added throughout — deny-by-default, per-table read policies, RPC-only writes.|
-| Orders        | `product_id` now `not null … on delete restrict`; no public RLS policies.    |
-| RPC hardening | Pin `search_path`, `grant execute` to anon/authenticated.                    |
-| Success page  | Made explicitly non-authoritative; webhook is the only order-status writer.  |
-| Webhook       | Signature verification + idempotency called out as requirements.             |
-| Shopping      | Added `ingredients` + `shopping_links` tables so Phase 3 needs no rewrite.   |
