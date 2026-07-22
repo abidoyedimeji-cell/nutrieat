@@ -108,7 +108,6 @@ the grocery assistant.
 | # | Decision | Notes |
 | - | -------- | ----- |
 | 10 | **Named distributor + print-ready files** | Model is decided (distributor prints + fulfils); the specific distributor, their order-integration method (API vs manual) and the print-ready interior/cover files are still needed before hardback checkout goes live |
-| —  | **Book name confirmation** | Title is locked (row 1); a later message left "the name of the book is …" blank — resend only if you intend to change it |
 | —  | Remaining **counts** | Smoothie/snack totals, substitution count (40 core meals is locked) |
 | —  | The full **40 meals** | Only ~16 sample meals collected so far — see [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) |
 
