@@ -25,8 +25,10 @@ awareness, built on supermarket-friendly ingredients.
 | Hardback Edition | Physical hardback | £17.99  | −20%         |
 | Hardback + PDF Bundle | Both         | £22.99–£24.99 *(TBC)* | — |
 
-- **Currency:** GBP (£), UK-first launch. Physical hardback fulfilment **UK-only** at
-  launch; PDF sold digitally. Money stored as `price_cents` + `currency = 'GBP'`.
+- **Currency & shipping:** GBP (£), UK-first. Hardback ships **UK £3.99 (1–2 days)** /
+  **International £8.99 (3–5 days)**, batch-printed; PDF sold digitally worldwide. Money
+  stored as `price_cents` + `currency = 'GBP'`. Policy: no change-of-mind refunds *(with
+  statutory-rights caveat — see ROADMAP)*.
 - **Meal claim (source of truth):** **40 core meals**, supported by smoothies, functional
   snacks, supplements, ingredient swaps and three two-week meal plans. *(The old "28"
   figure is retired.)*

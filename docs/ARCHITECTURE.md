@@ -146,9 +146,11 @@ the browser never writes commerce/content status. Timestamps `timestamptz defaul
   `price_cents`, `currency`, `stripe_price_id`, `inventory_tracking (bool)`, `active`.
   Separates Hardback / PDF / Bundle. RLS: public read of active variants.
 - **orders** — `id`, `user_id (→auth.users, nullable — guest checkout)`, `customer_email`,
-  `status (order_status)`, `currency`, `subtotal_cents`, `discount_cents`, `total_cents`,
-  `stripe_checkout_session_id (unique)`, `stripe_payment_intent_id`,
-  `fulfilment_status (fulfilment_status)`, shipping fields (physical), `paid_at`,
+  `status (order_status)`, `currency`, `subtotal_cents`, `shipping_cents`, `discount_cents`,
+  `total_cents`, `stripe_checkout_session_id (unique)`, `stripe_payment_intent_id`,
+  `fulfilment_status (fulfilment_status)`, **shipping fields** (physical:
+  `shipping_name`, `shipping_address_*`, `shipping_country`, `shipping_zone
+  (uk | international)`, `tracking_number`, `carrier`, `dispatched_at`), `paid_at`,
   `created_at`. RLS: **no public policies**; server-only writes. Phase 6 adds owner
   `select` (`user_id = auth.uid()`).
 - **order_items** — `id`, `order_id`, `product_variant_id`, `quantity`, `unit_price_cents`,
@@ -257,6 +259,13 @@ via dedicated early-access Price IDs, Stripe promotion codes, or DB-controlled d
 allowed; PDF entitlement is delivered on **launch day** (not immediately), hardback
 fulfilment begins once the print-ready file is confirmed.
 
+**Shipping** (hardback only) is a **destination-based flat rate** added at checkout, via
+two Stripe shipping options gated by the customer's country: **UK £3.99** (`shipping_zone
+= uk`, 1–2 day delivery) and **International £8.99** (`shipping_zone = international`, 3–5
+day delivery). Stripe Checkout collects + validates the shipping address; the chosen
+option's amount is written to `orders.shipping_cents` and folded into `total_cents`. The
+PDF variant has no shipping.
+
 ```
 Cookbook page → select edition
   → POST /api/checkout/create
@@ -299,9 +308,25 @@ restoration, watermarked PDF in a later phase.
 
 ## 10. Physical fulfilment
 
-Capture shipping address, fulfilment status, shipping method, tracking number, dispatch
-confirmation, refund/return status. Initially **manual** via admin: view paid physical
-orders, export fulfilment info, mark processing → shipped → delivered, add tracking.
+**Model: batch printing** — a pre-printed run is held with a fulfilment partner (3PL) and
+packed/shipped on order; **not** print-on-demand. Because stock is finite, hardback
+variants set `inventory_tracking = true` and admin tracks remaining units.
+
+On paid physical order the webhook sets `fulfilment_status = pending` and the order enters
+the admin queue. Fulfilment is **manual/admin-driven** to start: view paid physical orders,
+export fulfilment info (name, address, `shipping_zone`), mark processing → shipped →
+delivered, and add `tracking_number` + `carrier` (which triggers the dispatch email). When
+a specific 3PL with an API is chosen, this can be automated later without schema change.
+
+**Delivery promises** (for product page + emails): UK 1–2 days, International 3–5 days.
+
+**Refunds:** commercial policy is **no change-of-mind refunds**, but statutory rights can't
+be waived — a 14-day distance-selling cancellation right applies to the hardback, and
+faulty/damaged/not-as-described books must be refunded or replaced under the Consumer
+Rights Act. The `refunded` / `partially_refunded` statuses exist for those cases; refunds
+are issued via Stripe from admin. PDF refunds are avoided by capturing digital-content
+consent at checkout. See [`ROADMAP.md`](./ROADMAP.md#-refunds--legal-caveat-not-legal-advice)
+— **confirm `/refund-policy` wording with a solicitor.**
 
 ---
 

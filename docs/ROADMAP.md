@@ -85,7 +85,10 @@ the grocery assistant.
 | - | -------- | ----- |
 | 2  | Subtitle | *A practical meal guide for performance, energy, self-sufficiency and sustainable nutrition.* |
 | 3  | Currency | **GBP (£)** |
-| 4  | Launch territory | **UK-first**; hardback fulfilment **UK-only** at launch, PDF sold digitally |
+| 4  | Launch territory | **UK + International** hardback shipping; PDF sold digitally worldwide *(revised from UK-only)* |
+| —  | Fulfilment model | **Batch printing** (pre-printed run + fulfilment), not print-on-demand |
+| —  | Shipping | **UK £3.99 (1–2 days)**, **International £8.99 (3–5 days)** |
+| —  | Refunds | **No change-of-mind refunds** — see caveat below (statutory rights still apply) |
 | 5  | Hardback price | **£17.99** |
 | 6  | PDF price | **£9.99** |
 | 7  | Core meals | **40** (retire "28"); framing = 40 core meals + smoothies/snacks/supplements/swaps + 3 two-week plans |
@@ -103,14 +106,31 @@ the grocery assistant.
 | - | -------- | ----- |
 | 1  | Final **title** | Working title "Breakfast Superfood"; gates domain, metadata, cover, ads |
 | —  | **Bundle price** | £22.99 (strong offer) vs £24.99 (protect margin); separate = £27.98 |
-| 10 | **Physical fulfilment provider** | Hard dependency — drives shipping fields, workflow, delivery cost, emails; needed before checkout build is final |
+| 10 | **Specific printer + fulfilment partner** | Model is decided (batch print + fulfilment); the named printer/3PL and print-ready files are still needed before checkout goes live |
 | 11 | **PDF delivery rules** | Download limit, link expiry, watermarking |
 | —  | Remaining **counts** | Smoothie/snack totals, substitution count (40 core meals is locked) |
 | —  | The full **40 meals** | Only ~16 sample meals collected so far — see [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) |
 
-> The most urgent pending items are **final title**, **bundle price**, **fulfilment
-> provider**, and **PDF delivery rules** — the rest can be structured now without major
-> rework.
+> The most urgent pending items are **final title**, **bundle price**, the **named
+> printer/3PL + print-ready files**, and **PDF delivery rules** — the rest can be
+> structured now without major rework.
+
+### ⚠️ Refunds — legal caveat (not legal advice)
+
+"No refunds" is the stated commercial intent, but it can't be applied as a flat blanket to
+consumers. Document the policy this way instead:
+
+- **PDF:** effectively non-refundable **if** checkout captures explicit consent to immediate
+  access + acknowledgement that the 14-day cancellation right is waived (standard for
+  digital content). Build that consent checkbox → the no-refund position holds.
+- **Hardback (UK/EU consumers):** a flat "no refunds" is generally **not enforceable**.
+  Distance selling gives a 14-day change-of-mind cancellation right on physical goods, and
+  faulty/damaged/not-as-described books must be refunded or replaced under the Consumer
+  Rights Act **regardless of policy** — you cannot contract out of it. Enforceable version:
+  *"No change-of-mind refunds beyond the statutory cancellation window; customer pays
+  return postage; faulty or damaged items replaced free."*
+- Keep `refunded` / `partially_refunded` in `order_status` for the faulty-goods case.
+- **Confirm final wording with a solicitor** before publishing `/refund-policy`.
 
 ---
 
