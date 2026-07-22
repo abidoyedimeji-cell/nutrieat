@@ -41,25 +41,41 @@ Working title (not final commercial name):
 
 Cleaner structure:
 
-- **Title:** Breakfast Superfood
-- **Subtitle:** Performance Breakfasts, Lunches, Meals and Smoothies
-- **Alt subtitle:** A Practical Cookbook for Energy, Nutrition and Performance
+- **Title:** Breakfast Superfood *(working — final title still pending)*
+- **Subtitle (LOCKED):** *A practical meal guide for performance, energy, self-sufficiency
+  and sustainable nutrition.*
 
-> Finalise the title **before** domain, metadata, cover and ad assets. See ROADMAP
-> Decisions.
+> Finalise the **title** before domain, metadata, cover and ad assets. See ROADMAP
+> Decisions. The real founder story and manifesto for the founder section are in
+> [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md).
 
-## 4. Editions & pricing
+## 4. Editions & pricing (LOCKED)
 
-| Edition  | Format             | List price | Early-access | Approx. discounted |
-| -------- | ------------------ | ---------- | ------------ | ------------------ |
-| Hardback | Physical hardback  | $15.99     | −20%         | ~$12.79            |
-| PDF      | Downloadable PDF   | $8.99      | −40%         | ~$5.39             |
+Currency **GBP (£)**, **UK-first**. Prices and the core-meal count are final.
 
-The storefront must use **one consistent currency**. Because the business, supermarkets
-and primary launch market are UK-focused, the choice is between keeping USD, converting
-to GBP, or Stripe automatic local conversion. **For a UK-first launch, GBP usually gives
-the clearest experience.** This is an open decision (ROADMAP §Decisions); the data model
-stays currency-neutral until it's made.
+| Edition               | Format            | Price                | Early-access |
+| --------------------- | ----------------- | -------------------- | ------------ |
+| PDF Edition           | Downloadable PDF  | £9.99                | −40%         |
+| Hardback Edition      | Physical hardback | £17.99               | −20%         |
+| Hardback + PDF Bundle | Both              | £22.99–£24.99 *(TBC)*| —            |
+
+- **Bundle:** buying separately = £27.98, so the bundle should read as a clear saving —
+  **£22.99** for a strong offer, **£24.99** to protect margin. Final bundle price pending.
+- **Territory:** physical hardback fulfilment **UK-only at launch** (avoids international
+  shipping complexity); PDF sold digitally.
+- Money is stored as `price_cents` + `currency = 'GBP'` (see ARCHITECTURE). Early-access
+  discounts run **until launch day / first 7 days of launch** — "early-access pricing ends
+  when the cookbook officially launches."
+
+### Meal-count claim (source of truth)
+
+> The cookbook includes **40 core meals**, supported by smoothies, functional snacks,
+> supplements, ingredient swaps and three two-week meal plans.
+
+Use this exact framing across website, Stripe, ads, emails and book copy. **The old "28
+core meals" figure is retired.** The 40 breaks down as 14 breakfast + 14 performance-lunch
+ideas plus the wider system — smoothies and rotations are *not* counted inside the 40, to
+avoid confusion.
 
 ## 5. Target audiences
 
@@ -91,9 +107,10 @@ stays currency-neutral until it's made.
    ingredient flexibility + performance-focused eating.
 3. **What's inside** — breakfasts, lunches, smoothies, performance meals, superfood
    meals, meal rotations, ingredient swaps, shopping lists, nutritional breakdowns.
-4. **Key numbers** — core meals, breakfast/lunch/smoothie counts, meal rotations,
-   shopping-list categories, meal-plan weeks, substitutions.
-   *(Project currently references **28 core meals** — verify all counts before advertising.)*
+4. **Key numbers** — **40 core meals** (14 breakfast + 14 performance-lunch ideas),
+   smoothies & functional snacks, supplements, ingredient swaps, and **three two-week meal
+   plans**. *(40 is locked; use the source-of-truth framing in §4. The other counts —
+   smoothie/snack totals, substitution count — still need finalising before advertising.)*
 5. **How each recipe works** — sample layout: name, ingredients, servings, steps,
    calories, protein/carb/fat, key nutrients, alternatives, macro-adjustment options,
    pre/post-workout suitability.
@@ -101,9 +118,11 @@ stays currency-neutral until it's made.
    performance support, practical substitutions.
 7. **Early-access benefits** — 40% off PDF, 20% off hardback, first access, dev updates,
    design/recipe previews, voting, survey participation, possible recipe testing.
-8. **Founder story** — motivation, bodybuilding/performance-nutrition experience, need
-   for simple repeatable meals, energy-while-building-businesses, practical-not-
-   restrictive nutrition.
+8. **Founder story** — **Oladimeji Sultan Abidoye**, strategist/builder and Top-5 WNBF
+   natural bodybuilder (2022/23). The book came from a gap, not a love of cooking: eating
+   for physical performance worked, but didn't support a life shifted into business and
+   decision-making. Full bio + manifesto ("If your system can't support your ambition, it
+   will collapse under it") in [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md).
 9. **Blog & recipe content** — recent nutrition articles, meal-prep guides, recipe
    previews, ingredient guides, performance-food content.
 10. **Final CTA** — join early access / complete survey / buy / view inside.
@@ -140,9 +159,10 @@ Next.js app and store in Supabase (`submit_cookbook_survey` RPC — see ARCHITEC
 scenes, founder story, pricing announcement, launch countdown, early purchase window,
 public launch, post-purchase usage guidance.
 
-Provider is TBD (Resend / Loops / Brevo / Mailchimp / Klaviyo / ConvertKit) — must support
-transactional confirmations, marketing consent, automated sequences, segmentation,
-unsubscribe management.
+**Provider: Resend** (chosen) — clean for transactional email (early access, purchase
+confirmation, download access, launch updates) built into the app. It must still cover
+marketing consent, automated sequences, segmentation and unsubscribe management as the
+sequence grows.
 
 ## 11. Marketing funnel
 
@@ -174,7 +194,7 @@ early-access discount → CTA.
 ## 13. Flyer
 
 **Front:** title, book mock-up, positioning statement, physical + PDF prices, early-access
-discounts, QR code, primary CTA. **Feature summary:** 28 core meals *(verify)*,
+discounts, QR code, primary CTA. **Feature summary:** 40 core meals,
 breakfasts, lunches, smoothies, superfood + performance meals, meal rotations,
 substitutions, calories, macros, shopping lists, supermarket-friendly ingredients.
 **Differentiator:** "More than recipes — a practical food structure for energy,

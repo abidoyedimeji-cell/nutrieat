@@ -10,10 +10,10 @@ Full technical design for the platform. Product/launch context is in
 > tree.
 
 **Money convention:** all amounts are integer **minor units** in a `*_cents` column paired
-with an explicit `currency` column (ISO-4217). This keeps the app currency-neutral while
-the USD-vs-GBP decision is open (see ROADMAP §Decisions) and avoids float bugs. *(This
-supersedes the earlier draft's `price_pence`; same idea, but currency is now explicit
-rather than baked into the column name.)*
+with an explicit `currency` column (ISO-4217). Currency is **locked to GBP** (`currency =
+'GBP'`, pence), UK-first; the explicit column keeps optional future markets clean and
+avoids float bugs. *(This supersedes the earlier draft's `price_pence` — same idea, currency
+explicit rather than baked into the column name.)*
 
 ---
 
@@ -102,9 +102,16 @@ lead_source        : homepage | early_access | survey | blog | recipe | instagra
 involvement_level  : observer | feedback | voter | recipe_tester | contributor | high_involvement
 ```
 
-**Recipe categories are rows, not an enum** (they expand): Breakfast, Lunch, Smoothie,
-Superfood, Performance meal, Snack, Meal prep, High-protein, High-fat, Low-fat,
-Low-carbohydrate, …
+**Recipe categories are rows, not an enum** (they expand). **Locked launch categories:**
+
+1. Breakfast & Hybrid Breakfast Meals
+2. Performance Lunches
+3. Smoothies & Functional Snacks
+4. Superfoods & Supplements
+5. Meal Rotations & Plans
+
+(Nutrition descriptors like high-protein / high-fat / low-carb are handled as recipe
+**tags**, not top-level categories.)
 
 ---
 
@@ -150,8 +157,10 @@ the browser never writes commerce/content status. Timestamps `timestamptz defaul
   `payload_reference`. The idempotency ledger — a webhook checks/inserts here before
   acting. RLS: service-role only.
 - **download_entitlements** — `id`, `order_item_id`, `user_id (nullable)`,
-  `customer_email`, `file_path`, `download_limit`, `download_count`, `expires_at`,
-  `active`. RLS: owner-only read once accounts exist; issuance server-only.
+  `customer_email`, `file_path`, `download_limit`, `download_count`, `available_at
+  (nullable — pre-orders gate to launch day)`, `expires_at`, `active`. RLS: owner-only
+  read once accounts exist; issuance server-only. `redeem_download` refuses before
+  `available_at`.
 
 ### Cookbook content
 
@@ -168,7 +177,9 @@ the browser never writes commerce/content status. Timestamps `timestamptz defaul
 - **ingredient_substitutions** — `ingredient_id`, `substitute_ingredient_id`,
   `substitution_ratio`, `reason`, `nutritional_difference`, `priority`.
 - **meal_plans** — `id`, `title`, `slug (unique)`, `description`, `number_of_days`,
-  `goal`, `status (content_status)`.
+  `goal`, `status (content_status)`. **Three locked two-week plans** to seed: *Balanced
+  Performance Plan*, *High Fat + High Protein Plan*, *High Protein + Lower Fat / Lower Carb
+  Plan* (week 1 = core structure, week 2 = variation via ingredient swaps).
 - **meal_plan_recipes** — `meal_plan_id`, `recipe_id`, `day_number`, `meal_slot`,
   `rotation_group`.
 
@@ -238,10 +249,13 @@ stays in a dedicated route handler.**
 
 ## 8. Stripe flow (webhook is authoritative)
 
-**Catalogue:** Product 1 *Breakfast Superfood – Hardback*, Product 2 *… – PDF*, later
-Product 3 *… – Hardback + PDF Bundle*. Early-access discount via dedicated early-access
-Price IDs, Stripe promotion codes, or DB-controlled discounts — **the DB determines
-eligibility and selects the correct Stripe price.**
+**Catalogue (GBP):** Product 1 *Hardback Edition* — **£17.99** (`1799`); Product 2 *PDF
+Edition* — **£9.99** (`999`); Product 3 *Hardback + PDF Bundle* — **£22.99–£24.99** (TBC).
+Early-access: **−20% hardback, −40% PDF**, running until launch day / first 7 days. Discount
+via dedicated early-access Price IDs, Stripe promotion codes, or DB-controlled discounts —
+**the DB determines eligibility and selects the correct Stripe price.** Pre-orders are
+allowed; PDF entitlement is delivered on **launch day** (not immediately), hardback
+fulfilment begins once the print-ready file is confirmed.
 
 ```
 Cookbook page → select edition
@@ -359,8 +373,8 @@ STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
 
-# Email (provider TBD)
-EMAIL_API_KEY=
+# Email (Resend)
+RESEND_API_KEY=
 EMAIL_FROM=
 
 # App

@@ -17,16 +17,21 @@ Not a pile of random recipes — a structured food system: breakfasts, lunches, 
 smoothies, performance meals, meal rotations, ingredient swaps, and macro/calorie
 awareness, built on supermarket-friendly ingredients.
 
-## Editions
+## Editions (prices locked, GBP, UK-first)
 
-| Edition            | Format             | List price | Early-access |
-| ------------------ | ------------------ | ---------- | ------------ |
-| Breakfast Superfood – Hardback | Physical hardback | $15.99 | −20% |
-| Breakfast Superfood – PDF      | Downloadable PDF  | $8.99  | −40% |
+| Edition          | Format            | Price   | Early-access |
+| ---------------- | ----------------- | ------- | ------------ |
+| PDF Edition      | Downloadable PDF  | £9.99   | −40%         |
+| Hardback Edition | Physical hardback | £17.99  | −20%         |
+| Hardback + PDF Bundle | Both         | £22.99–£24.99 *(TBC)* | — |
 
-> Currency (USD vs GBP vs Stripe auto-conversion) is an **open decision** — the app is
-> being designed currency-neutral (`price_cents` + `currency` column). See
-> [`docs/ROADMAP.md`](./docs/ROADMAP.md) §Decisions.
+- **Currency:** GBP (£), UK-first launch. Physical hardback fulfilment **UK-only** at
+  launch; PDF sold digitally. Money stored as `price_cents` + `currency = 'GBP'`.
+- **Meal claim (source of truth):** **40 core meals**, supported by smoothies, functional
+  snacks, supplements, ingredient swaps and three two-week meal plans. *(The old "28"
+  figure is retired.)*
+
+See [`docs/ROADMAP.md`](./docs/ROADMAP.md) §Decisions for the full locked/pending list.
 
 ## Planned stack
 
@@ -40,7 +45,8 @@ Stripe Checkout + webhooks · Vercel · transactional email provider (TBD).
 | [`docs/PRODUCT-AND-LAUNCH.md`](./docs/PRODUCT-AND-LAUNCH.md) | Vision, positioning, pricing, audiences, homepage structure, early-access + email journeys, marketing funnel, ads, analytics. |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Routes, stack, data model + RLS, enums, RPCs, API routes, Stripe flow, PDF delivery, auth, SEO, admin. |
 | [`docs/SHOPPING-INTEGRATION.md`](./docs/SHOPPING-INTEGRATION.md) | Ingredient → supermarket feature: the 6 levels, what's realistic, retailers, phased design. |
-| [`docs/ROADMAP.md`](./docs/ROADMAP.md) | MVP scope, explicit exclusions, 8 build phases, first milestone, and the decisions to lock before building. |
+| [`docs/COOKBOOK-CONTENT.md`](./docs/COOKBOOK-CONTENT.md) | The actual book content: manifesto, founder bio, structure, glossary, Top-5 ingredient tables (DB seed), micronutrient profiles, sample meals. |
+| [`docs/ROADMAP.md`](./docs/ROADMAP.md) | MVP scope, explicit exclusions, 8 build phases, first milestone, and the locked/pending decisions. |
 
 ## First milestone
 

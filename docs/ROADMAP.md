@@ -77,28 +77,40 @@ the grocery assistant.
 
 ---
 
-## Decisions to lock before building too far
+## Decisions
 
-These gate domain, metadata, cover, ad assets, and the commerce config:
+### ✅ Locked
 
-1. Final cookbook **title**
-2. Final **subtitle**
-3. Primary **currency** (USD / GBP / Stripe auto-conversion — GBP favoured for UK-first)
-4. **UK-only or international** launch
-5. Final **physical-book price**
-6. Final **PDF price**
-7. Confirmed number of **core meals** (currently references 28 — verify)
-8. Confirmed **meal categories**
-9. Confirmed **meal-rotation count**
-10. **Physical fulfilment** provider
-11. **PDF delivery rules** (download limit, link expiry, watermarking)
-12. **Email provider**
-13. Final **early-access discount period**
-14. Whether **checkout is available before the launch date**
-15. Whether early customers **receive the PDF immediately or on release day**
+| # | Decision | Value |
+| - | -------- | ----- |
+| 2  | Subtitle | *A practical meal guide for performance, energy, self-sufficiency and sustainable nutrition.* |
+| 3  | Currency | **GBP (£)** |
+| 4  | Launch territory | **UK-first**; hardback fulfilment **UK-only** at launch, PDF sold digitally |
+| 5  | Hardback price | **£17.99** |
+| 6  | PDF price | **£9.99** |
+| 7  | Core meals | **40** (retire "28"); framing = 40 core meals + smoothies/snacks/supplements/swaps + 3 two-week plans |
+| 8  | Meal categories | Breakfast & Hybrid Breakfast · Performance Lunches · Smoothies & Functional Snacks · Superfoods & Supplements · Meal Rotations & Plans |
+| 9  | Meal plans | **3 two-week plans**: Balanced Performance · High Fat + High Protein · High Protein + Lower Fat/Lower Carb |
+| 12 | Email provider | **Resend** |
+| 13 | Early-access discount period | Until launch day / first 7 days of launch |
+| 14 | Pre-orders before launch | **Yes**, allowed (with clear messaging) |
+| 15 | PDF timing | Pre-orders get **launch-day** access; immediate after launch |
+| —  | Editions | Sell **separately + bundle**: PDF / Hardback / Hardback+PDF Bundle |
 
-> Several of these (title/subtitle/currency/prices/counts) directly determine copy,
-> metadata, structured data, and Stripe catalogue — worth locking first.
+### ⏳ Still pending (locking these unblocks final build + assets)
+
+| # | Decision | Notes |
+| - | -------- | ----- |
+| 1  | Final **title** | Working title "Breakfast Superfood"; gates domain, metadata, cover, ads |
+| —  | **Bundle price** | £22.99 (strong offer) vs £24.99 (protect margin); separate = £27.98 |
+| 10 | **Physical fulfilment provider** | Hard dependency — drives shipping fields, workflow, delivery cost, emails; needed before checkout build is final |
+| 11 | **PDF delivery rules** | Download limit, link expiry, watermarking |
+| —  | Remaining **counts** | Smoothie/snack totals, substitution count (40 core meals is locked) |
+| —  | The full **40 meals** | Only ~16 sample meals collected so far — see [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) |
+
+> The most urgent pending items are **final title**, **bundle price**, **fulfilment
+> provider**, and **PDF delivery rules** — the rest can be structured now without major
+> rework.
 
 ---
 
