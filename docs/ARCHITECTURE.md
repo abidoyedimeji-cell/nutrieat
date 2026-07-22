@@ -150,7 +150,8 @@ the browser never writes commerce/content status. Timestamps `timestamptz defaul
   `total_cents`, `stripe_checkout_session_id (unique)`, `stripe_payment_intent_id`,
   `fulfilment_status (fulfilment_status)`, **shipping fields** (physical:
   `shipping_name`, `shipping_address_*`, `shipping_country`, `shipping_zone
-  (uk | international)`, `tracking_number`, `carrier`, `dispatched_at`), `paid_at`,
+  (uk | international)`, `provider_order_id (distributor ref, nullable)`, `tracking_number`,
+  `carrier`, `dispatched_at`), `paid_at`,
   `created_at`. RLS: **no public policies**; server-only writes. Phase 6 adds owner
   `select` (`user_id = auth.uid()`).
 - **order_items** — `id`, `order_id`, `product_variant_id`, `quantity`, `unit_price_cents`,
@@ -159,10 +160,12 @@ the browser never writes commerce/content status. Timestamps `timestamptz defaul
   `payload_reference`. The idempotency ledger — a webhook checks/inserts here before
   acting. RLS: service-role only.
 - **download_entitlements** — `id`, `order_item_id`, `user_id (nullable)`,
-  `customer_email`, `file_path`, `download_limit`, `download_count`, `available_at
-  (nullable — pre-orders gate to launch day)`, `expires_at`, `active`. RLS: owner-only
-  read once accounts exist; issuance server-only. `redeem_download` refuses before
-  `available_at`.
+  `customer_email`, `file_path`, `download_limit (default 1)`, `download_count`,
+  `available_at (nullable — pre-orders gate to launch day)`, `expires_at (nullable — null =
+  no expiry)`, `active`. RLS: owner-only read once accounts exist; issuance server-only.
+  `redeem_download` refuses before `available_at`. Admin can **restore/regenerate** an
+  entitlement (resets `download_count`) — the recovery path for failed downloads given the
+  1-download limit.
 
 ### Cookbook content
 
@@ -252,7 +255,9 @@ stays in a dedicated route handler.**
 ## 8. Stripe flow (webhook is authoritative)
 
 **Catalogue (GBP):** Product 1 *Hardback Edition* — **£17.99** (`1799`); Product 2 *PDF
-Edition* — **£9.99** (`999`); Product 3 *Hardback + PDF Bundle* — **£22.99–£24.99** (TBC).
+Edition* — **£9.99** (`999`); Product 3 *Hardback + PDF Bundle* — **£24.99** (`2499`, excl.
+shipping — bundle contains the physical book, so it ships as a physical order **and** grants
+a PDF entitlement).
 Early-access: **−20% hardback, −40% PDF**, running until launch day / first 7 days. Discount
 via dedicated early-access Price IDs, Stripe promotion codes, or DB-controlled discounts —
 **the DB determines eligibility and selects the correct Stripe price.** Pre-orders are
@@ -303,20 +308,29 @@ Payment confirmed → entitlement created → confirmation email
   → temporary signed URL generated → download_count incremented
 ```
 
-Rules: max downloads, link expiry, ability to regenerate links, manual access
-restoration, watermarked PDF in a later phase.
+**Rules (LOCKED):** **1 download per order** (`download_limit = 1`), **no entitlement
+expiry** (`expires_at = null`), **no watermark**. Note: each *signed URL* still gets a short
+technical TTL (e.g. 10–15 min) at generation time for security — that's transport, separate
+from the permanent entitlement. If a customer's single download fails, **admin restores
+access** (regenerates the entitlement); this is the deliberate recovery path for the
+1-download limit.
 
 ## 10. Physical fulfilment
 
-**Model: batch printing** — a pre-printed run is held with a fulfilment partner (3PL) and
-packed/shipped on order; **not** print-on-demand. Because stock is finite, hardback
-variants set `inventory_tracking = true` and admin tracks remaining units.
+**Model: distributor print + fulfilment** — a single distributor **prints and fulfils** the
+book (prints, holds/produces stock, and ships customer orders). This supersedes the earlier
+batch-print + separate-3PL plan. Whether the distributor prints on demand or holds a run
+determines `inventory_tracking` on the hardback variant — set it `true` if they hold finite
+stock you must track, `false` if they print per order. *(Named distributor still pending —
+see ROADMAP.)*
 
-On paid physical order the webhook sets `fulfilment_status = pending` and the order enters
-the admin queue. Fulfilment is **manual/admin-driven** to start: view paid physical orders,
-export fulfilment info (name, address, `shipping_zone`), mark processing → shipped →
-delivered, and add `tracking_number` + `carrier` (which triggers the dispatch email). When
-a specific 3PL with an API is chosen, this can be automated later without schema change.
+On paid physical order (Hardback or Bundle) the webhook sets `fulfilment_status = pending`
+and the order enters the fulfilment path. **How orders reach the distributor** depends on
+what they offer: an **API** (webhook submits the order automatically, stores their order id
++ tracking) or **manual/export** (admin forwards paid orders, then records
+`tracking_number` + `carrier`, which triggers the dispatch email). Confirm the distributor's
+integration method when they're named; either way the schema is unchanged (an optional
+`provider_order_id` on `orders` covers the API case).
 
 **Delivery promises** (for product page + emails): UK 1–2 days, International 3–5 days.
 

@@ -92,14 +92,17 @@ Currency **GBP (£)**, **UK-first**. Prices and the core-meal count are final.
 | --------------------- | ----------------- | -------------------- | ------------ |
 | PDF Edition           | Downloadable PDF  | £9.99                | −40%         |
 | Hardback Edition      | Physical hardback | £17.99               | −20%         |
-| Hardback + PDF Bundle | Both              | £22.99–£24.99 *(TBC)*| —            |
+| Hardback + PDF Bundle | Both              | **£24.99** (excl. shipping) | —      |
 
-- **Bundle:** buying separately = £27.98, so the bundle should read as a clear saving —
-  **£22.99** for a strong offer, **£24.99** to protect margin. Final bundle price pending.
+- **Bundle (LOCKED £24.99, excl. shipping):** buying separately = £27.98, so it saves
+  ~£2.99 and is the only way to get both. It contains the physical book, so it **ships as a
+  physical order** — shipping (£3.99 UK / £8.99 intl) is added on top — and also grants the
+  PDF download entitlement.
 - **Territory & shipping:** hardback ships **UK and International** — **UK £3.99 (1–2 day
   delivery)**, **International £8.99 (3–5 day delivery)**; PDF sold digitally worldwide.
-  Fulfilment is **batch-printed** (pre-printed run + fulfilment partner), not
-  print-on-demand. *(Revised from the earlier UK-only-at-launch position.)*
+  Books are **printed and fulfilled by a distributor** (single print + distribution
+  partner). *(Revised from the earlier UK-only, and from the earlier batch-print +
+  separate-3PL plan.)*
 - **Refunds:** stated policy is **no change-of-mind refunds** — but see the legal caveat in
   [`ROADMAP.md`](./ROADMAP.md#-refunds--legal-caveat-not-legal-advice); statutory rights
   (14-day distance-selling cancellation; faulty/damaged) still apply and can't be waived

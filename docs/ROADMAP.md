@@ -85,12 +85,13 @@ the grocery assistant.
 | - | -------- | ----- |
 | 1  | Title | *My Healthy Cookbook Recipe For You: Breakfast, Lunch, Smoothies and Superfoods* |
 | 2  | Subtitle | *A practical meal guide for performance, energy, self-sufficiency and sustainable nutrition.* |
-| —  | Printer / fulfilment model | Batch print (Mixam/Ex Why Zed first run → trade printer at 1,000+) + separate UK 3PL |
+| —  | Fulfilment model | **Distributor prints + fulfils** (single print + distribution partner); named distributor still pending |
 | 3  | Currency | **GBP (£)** |
 | 4  | Launch territory | **UK + International** hardback shipping; PDF sold digitally worldwide *(revised from UK-only)* |
-| —  | Fulfilment model | **Batch printing** (pre-printed run + fulfilment), not print-on-demand |
 | —  | Shipping | **UK £3.99 (1–2 days)**, **International £8.99 (3–5 days)** |
 | —  | Refunds | **No change-of-mind refunds** — see caveat below (statutory rights still apply) |
+| —  | Bundle price | **£24.99** (excl. shipping); ships as a physical order + grants PDF entitlement |
+| 11 | PDF delivery rules | **1 download / order · no expiry · no watermark** (admin can restore access) |
 | 5  | Hardback price | **£17.99** |
 | 6  | PDF price | **£9.99** |
 | 7  | Core meals | **40** (retire "28"); framing = 40 core meals + smoothies/snacks/supplements/swaps + 3 two-week plans |
@@ -106,15 +107,14 @@ the grocery assistant.
 
 | # | Decision | Notes |
 | - | -------- | ----- |
-| —  | **Bundle price** | £22.99 (strong offer) vs £24.99 (protect margin); separate = £27.98 |
-| 10 | **Specific printer + fulfilment partner** | Model is decided (batch print + fulfilment); the named printer/3PL and print-ready files are still needed before checkout goes live |
-| 11 | **PDF delivery rules** | Download limit, link expiry, watermarking |
+| 10 | **Named distributor + print-ready files** | Model is decided (distributor prints + fulfils); the specific distributor, their order-integration method (API vs manual) and the print-ready interior/cover files are still needed before hardback checkout goes live |
+| —  | **Book name confirmation** | Title is locked (row 1); a later message left "the name of the book is …" blank — resend only if you intend to change it |
 | —  | Remaining **counts** | Smoothie/snack totals, substitution count (40 core meals is locked) |
 | —  | The full **40 meals** | Only ~16 sample meals collected so far — see [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) |
 
-> The most urgent pending items are **bundle price**, the **named printer/3PL +
-> print-ready files**, and **PDF delivery rules** — the rest can be structured now without
-> major rework.
+> The one item still gating a fully live **hardback** checkout is the **named distributor +
+> print-ready files**. Everything else is structured — the PDF path is fully specified and
+> buildable now.
 
 ### ⚠️ Refunds — legal caveat (not legal advice)
 
