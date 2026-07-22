@@ -83,7 +83,9 @@ the grocery assistant.
 
 | # | Decision | Value |
 | - | -------- | ----- |
+| 1  | Title | *My Healthy Cookbook Recipe For You: Breakfast, Lunch, Smoothies and Superfoods* |
 | 2  | Subtitle | *A practical meal guide for performance, energy, self-sufficiency and sustainable nutrition.* |
+| —  | Printer / fulfilment model | Batch print (Mixam/Ex Why Zed first run → trade printer at 1,000+) + separate UK 3PL |
 | 3  | Currency | **GBP (£)** |
 | 4  | Launch territory | **UK + International** hardback shipping; PDF sold digitally worldwide *(revised from UK-only)* |
 | —  | Fulfilment model | **Batch printing** (pre-printed run + fulfilment), not print-on-demand |
@@ -104,16 +106,15 @@ the grocery assistant.
 
 | # | Decision | Notes |
 | - | -------- | ----- |
-| 1  | Final **title** | Working title "Breakfast Superfood"; gates domain, metadata, cover, ads |
 | —  | **Bundle price** | £22.99 (strong offer) vs £24.99 (protect margin); separate = £27.98 |
 | 10 | **Specific printer + fulfilment partner** | Model is decided (batch print + fulfilment); the named printer/3PL and print-ready files are still needed before checkout goes live |
 | 11 | **PDF delivery rules** | Download limit, link expiry, watermarking |
 | —  | Remaining **counts** | Smoothie/snack totals, substitution count (40 core meals is locked) |
 | —  | The full **40 meals** | Only ~16 sample meals collected so far — see [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) |
 
-> The most urgent pending items are **final title**, **bundle price**, the **named
-> printer/3PL + print-ready files**, and **PDF delivery rules** — the rest can be
-> structured now without major rework.
+> The most urgent pending items are **bundle price**, the **named printer/3PL +
+> print-ready files**, and **PDF delivery rules** — the rest can be structured now without
+> major rework.
 
 ### ⚠️ Refunds — legal caveat (not legal advice)
 

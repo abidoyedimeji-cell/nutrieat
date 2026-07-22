@@ -1,9 +1,11 @@
-# NutriEat — Breakfast Superfood Cookbook
+# NutriEat
 
-The digital home for a performance-nutrition cookbook. Starts as a focused **cookbook
-sales + early-access + content platform**, then grows into a **meal-planning and
-grocery-shopping ecosystem** — in that order, so the launch stays commercially useful
-without overbuilding the hard supermarket features before demand is proven.
+The digital home for **My Healthy Cookbook Recipe For You: Breakfast, Lunch, Smoothies and
+Superfoods** — a performance-nutrition cookbook. (App/domain identity: *NutriEat*; the full
+title is the book's cover + SEO name.) Starts as a focused **cookbook sales + early-access +
+content platform**, then grows into a **meal-planning and grocery-shopping ecosystem** — in
+that order, so the launch stays commercially useful without overbuilding the hard
+supermarket features before demand is proven.
 
 > **Status: planning.** This repository holds the architecture and launch spec only.
 > No application code exists yet. See [`docs/`](./docs).

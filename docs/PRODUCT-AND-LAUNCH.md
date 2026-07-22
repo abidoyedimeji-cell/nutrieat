@@ -39,15 +39,50 @@ practical for athletes, entrepreneurs and everyday users.
 Working title (not final commercial name):
 *Breakfast Superfood, Performance Lunches and Smoothies – My Cookbook Recipe for You*
 
-Cleaner structure:
-
-- **Title:** Breakfast Superfood *(working — final title still pending)*
+- **Title (LOCKED):** *My Healthy Cookbook Recipe For You: Breakfast, Lunch, Smoothies and
+  Superfoods.*
 - **Subtitle (LOCKED):** *A practical meal guide for performance, energy, self-sufficiency
   and sustainable nutrition.*
 
-> Finalise the **title** before domain, metadata, cover and ad assets. See ROADMAP
-> Decisions. The real founder story and manifesto for the founder section are in
-> [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md).
+The title is long and keyword-rich — good as the SEO `<title>` and cover text; the app/
+domain identity stays short (**NutriEat**). The real founder story and manifesto for the
+founder section are in [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md).
+
+## 3a. Store copy (product page + metadata)
+
+Reframed from the original drafts to describe **only what ships**. *(The earlier drafts
+centred on "one-click add to Ocado basket" — Ocado was an outreach idea, not a committed
+feature, so it's removed. Programmatic basket-filling is Level 5 in
+[`SHOPPING-INTEGRATION.md`](./SHOPPING-INTEGRATION.md) and needs a partnership that doesn't
+exist yet. What ships is shoppable lists + outbound retailer/affiliate links.)*
+
+**Short description:**
+> *My Healthy Cookbook Recipe For You* is a digital-first performance-nutrition cookbook:
+> structured, macro-aware meals built around practical supermarket ingredients. Every
+> recipe comes with a complete, shoppable ingredient list and smart swap options — so
+> going from meal to shopping list takes seconds.
+
+**Commercial description:**
+> The cookbook combines recipes, nutritional education and meal planning into a single
+> customer journey. Rather than just providing recipes, it takes customers from meal
+> discovery to a ready-to-shop ingredient list through:
+> - Shoppable, structured ingredient lists
+> - Performance-focused meal collections
+> - Macro and micronutrient categorisation
+> - Weekly meal plans
+> - Smart ingredient substitutions
+> - Quick links to shop the ingredients at major UK supermarkets
+>
+> This creates a path from inspiration to a filled shopping list — with deeper grocery-
+> basket integration planned as a future step.
+
+**Customer value — customers can:**
+> - Discover meals based on goals
+> - View calories and macros
+> - Compare ingredient alternatives
+> - Choose healthier ingredient recommendations
+> - Generate a complete shopping list from any recipe or weekly plan in seconds
+> - Shop those ingredients at major UK supermarkets via quick links
 
 ## 4. Editions & pricing (LOCKED)
 
