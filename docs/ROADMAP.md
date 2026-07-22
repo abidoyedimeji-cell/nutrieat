@@ -133,6 +133,24 @@ consumers. Document the policy this way instead:
 - Keep `refunded` / `partially_refunded` in `order_status` for the faulty-goods case.
 - **Confirm final wording with a solicitor** before publishing `/refund-policy`.
 
+### ⚠️ Health claims — legal caveat (not legal advice)
+
+The delivered superfood/smoothie pages carry strong claims — e.g. *"these … are medicine,"*
+*"detoxifies heavy metals,"* *"reduces cortisol 30%,"* *"highest vitamin C (60× oranges)."*
+For a food product sold to UK consumers this is regulated territory:
+
+- GB retains the **Nutrition & Health Claims Regulation** — only **authorised** health
+  claims may be made on food, and **medicinal/disease claims** (curing, treating, "medicine",
+  "detox") are generally **prohibited** for foods. Advertising is also bound by the
+  **ASA/CAP codes**.
+- **Website/marketing copy** (ads, product page, blog) is the higher-risk surface — keep it
+  to authorised, measured wording. Inside the **paid book** there's more latitude, but
+  medicinal/curative phrasing is still risky.
+- Recommended: soften claims to structure/function wording, add a standard disclaimer
+  (*"for general information; not medical advice; not intended to diagnose, treat, cure or
+  prevent any disease"*), and **have a solicitor review** before publishing publicly.
+- This affects which lines from `COOKBOOK-CONTENT.md` can appear on indexable pages.
+
 ---
 
 ## Final direction

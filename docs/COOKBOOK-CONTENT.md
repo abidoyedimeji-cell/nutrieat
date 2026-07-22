@@ -195,6 +195,82 @@ overnight). These become the first fully-written recipes.
 
 ---
 
+## Superfoods & Supplements section — "20 Superfoods for Daily Health"
+
+**Finished, designed pages** (delivered as JPG spreads, ~A5 landscape @300dpi). Intro line:
+*"These nutrient-dense whole foods can be added to smoothies, meals, or eaten as snacks."*
+Each entry has **Health Benefits / How to Use / Best For**. These map to the
+**Superfoods & Supplements** category and greatly expand the `ingredients` seed.
+
+| # | Superfood | Health benefits | How to use | Best for |
+|---|-----------|-----------------|-----------|----------|
+| 1 | Spirulina | Complete protein, iron, B vitamins, chlorophyll | ½–1 tsp in smoothies | Energy, iron deficiency, vegan protein |
+| 2 | Cacao Powder (Raw) | Highest magnesium source, iron, copper, mood-boosting PEA | 1–2 tbsp smoothies/oatmeal | Energy, mood, magnesium |
+| 3 | Chia Seeds | Omega-3 ALA, calcium, magnesium, fibre, complete protein | 1–2 tbsp smoothies/pudding | Bones, omega-3s, digestion |
+| 4 | Hemp Seeds | Complete protein, ideal omega ratio, iron, zinc, magnesium | 2–3 tbsp smoothies/salads | Mood, protein, omega-3s |
+| 5 | Pumpkin Seeds | Highest zinc plant source, magnesium, iron, tryptophan | 2 tbsp raw or roasted | Mood, zinc, prostate health |
+| 6 | Brazil Nuts | Highest selenium on Earth (1 nut ≈ 175% DV) | 2–3 nuts daily (limit) | Energy, thyroid, antioxidants |
+| 7 | Walnuts | Highest omega-3 ALA of any nut, polyphenols, vitamin E, melatonin | ¼ cup daily | Mood, brain health, sleep |
+| 8 | Acai Powder | Highest ORAC antioxidant score, anthocyanins, omega-3/6/9 | 1–2 tbsp smoothie bowls | Energy, antioxidants, heart |
+| 9 | Goji Berries | Complete protein, vitamin A, zeaxanthin, iron, zinc | 1–2 tbsp smoothies/tea | Energy, vision, immune |
+| 10 | Maca Powder | Adaptogen for stress, B vitamins, iron, hormonal balance | 1 tbsp (start ½ tsp) | Energy, stress, hormones |
+| 11 | Nutritional Yeast | Complete B-complex incl. B12, complete protein, zinc | 1–2 tbsp as seasoning | Mood, energy, vegan B12 |
+| 12 | Chlorella | Chlorophyll, iron, B vitamins, protein (marketed as heavy-metal "detox") | ½–1 tsp in smoothies | Energy, iron |
+| 13 | Turmeric | Curcumin (anti-inflammatory), supports BDNF, manganese | ½–1 tsp with black pepper | Mood, inflammation, joints |
+| 14 | Camu Camu Powder | Very high vitamin C, adrenal support | ½–1 tsp in smoothies | Energy, stress, immune |
+| 15 | Tahini | High plant calcium, copper, magnesium, zinc | 2 tbsp smoothies/dressings | Bones, calcium, healthy fats |
+| 16 | Blackstrap Molasses | Iron, calcium, magnesium, potassium, B vitamins | 1 tbsp in smoothies | Energy, iron, minerals |
+| 17 | Moringa Powder | Complete protein, iron, calcium, vitamin A, amino acids | ½–1 tsp smoothies/tea | Energy, bones, protein |
+| 18 | Ashwagandha Powder | Adaptogen (cortisol support), thyroid, GABA | ½–1 tsp before bed | Mood, stress, sleep, anxiety |
+| 19 | Flaxseed (Ground) | High plant omega-3 ALA, lignans, fibre | 1–2 tbsp ground (not whole) | Bones, omega-3s, hormones |
+| 20 | Bee Pollen | Complete protein, B vitamins, enzymes, antioxidants | 1 tsp daily (test for allergies) | Energy, immune, allergies |
+
+> Closing "Conclusion — Your Path to Vibrant Health" page also exists.
+> **Wording note:** some source lines make strong claims ("detoxifies heavy metals", "…are
+> medicine"). Softened here; see the **health-claims caveat** in
+> [`ROADMAP.md`](./ROADMAP.md#-health-claims--legal-caveat-not-legal-advice) before any of
+> this goes on the public site.
+
+## Smoothies & Functional Snacks section — "Fruit Smoothie Shake"
+
+**Finished, designed pages.** All recipes make **16–20 oz (serves 1–2)**; each has *Primary
+Benefits / Ingredients / Why It Works*. **20 recipes in three groups** → the **Smoothies &
+Functional Snacks** category, and a big source of recipe + ingredient data.
+
+**Energy-Boosting (1–7)**
+1. **Mitochondrial Power** — spinach, banana, blueberries, pumpkin seeds, cacao, chia, coconut water, spirulina.
+2. **Iron-Rich Oxygen Booster** — spinach, strawberries, blackberries, orange, hemp seeds, blackstrap molasses, water.
+3. **Thyroid Energizer** — pineapple, mango, banana, Brazil nuts, coconut oil, dulse flakes, coconut milk, sea salt.
+4. **B-Complex Energy Explosion** — raspberries, cherries, avocado, sunflower seeds, nutritional yeast, almond milk, raw honey.
+5. **Adrenal Support & Stamina** — strawberries, orange, papaya, camu camu, maca, almond butter, coconut water.
+6. **Electrolyte Recharge** — watermelon, orange, cucumber, banana, coconut water, lime, Himalayan salt, mint.
+7. **Antioxidant Energy Shield** — mixed berries, pomegranate seeds, kale, goji, acai, walnuts, green tea.
+
+**Bone-Strengthening (8–13)**
+8. **Calcium Absorption Optimizer** — kale, pineapple, banana, tahini, chia, fortified almond milk, vanilla.
+9. **Vitamin D Bone Builder** — blueberries, blackberries, orange, almond butter, flax oil, sun-dried mushrooms, oat milk.
+10. **Magnesium Bone Matrix** — spinach, banana, avocado, pumpkin seeds, dark chocolate chips, coconut milk, raw honey.
+11. **Collagen Support** — strawberries, papaya, mango, orange, hemp seeds, collagen peptides, coconut water.
+12. **Boron Bone Density Boost** — dried apricots, prunes, avocado, almonds, almond milk, raw honey, cinnamon.
+13. **Silicon Bone Scaffold** — cucumber, green bell pepper, pineapple, spinach, ground flaxseed, coconut water, mint.
+
+**Mood & Impulse Control (14–20)**
+14. **Dopamine Focus** — banana, blueberries, spinach, pumpkin seeds, cacao, protein powder, almond milk.
+15. **Serotonin Mood Lifter** — pineapple, banana, mango, walnuts, chia, coconut milk, turmeric.
+16. **GABA Calming** — banana, cherries, blueberries, spinach, cashews, cacao nibs, chamomile tea.
+17. **Omega-3 Brain Stabilizer** — mixed berries, orange, avocado, walnuts, chia, flax oil, coconut water.
+18. **B-Complex Mood Regulator** — strawberries, banana, avocado, sunflower seeds, nutritional yeast, almond milk, vanilla.
+19. **Iron-Enhanced Mental Clarity** — spinach, strawberries, orange, pumpkin seeds, blackstrap molasses, spirulina, coconut water.
+20. **Adaptogenic Stress Balancer** — blueberries, banana, mango, ashwagandha, maca, almond butter, coconut milk, cinnamon.
+
+> Page assets are JPG spreads (not yet in the repo — see the open question at the end of
+> this doc). For the web build these become `recipe_previews` (smoothies) and a superfoods
+> reference, plus a large `ingredients` expansion (spirulina, cacao, chia, hemp, acai,
+> goji, maca, moringa, ashwagandha, chlorella, camu camu, tahini, blackstrap molasses,
+> flaxseed, bee pollen, and the smoothie fruits/veg).
+
+---
+
 ## How this maps to the build
 
 - **Ingredient tables → `ingredients` seed** (canonical_name, category, dietary_tags,
