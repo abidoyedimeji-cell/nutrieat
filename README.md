@@ -50,7 +50,8 @@ Stripe Checkout + webhooks · Vercel · transactional email provider (TBD).
 | [`docs/PRODUCT-AND-LAUNCH.md`](./docs/PRODUCT-AND-LAUNCH.md) | Vision, positioning, pricing, audiences, homepage structure, early-access + email journeys, marketing funnel, ads, analytics. |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Routes, stack, data model + RLS, enums, RPCs, API routes, Stripe flow, PDF delivery, auth, SEO, admin. |
 | [`docs/SHOPPING-INTEGRATION.md`](./docs/SHOPPING-INTEGRATION.md) | Ingredient → supermarket feature: the 6 levels, what's realistic, retailers, phased design. |
-| [`docs/COOKBOOK-CONTENT.md`](./docs/COOKBOOK-CONTENT.md) | The actual book content: manifesto, founder bio, structure, glossary, Top-5 ingredient tables (DB seed), micronutrient profiles, sample meals. |
+| [`docs/COOKBOOK-CONTENT.md`](./docs/COOKBOOK-CONTENT.md) | The actual book content: manifesto, founder bio, structure, glossary, Top-5 ingredient tables (DB seed), micronutrient profiles, sample meals, 20 smoothies, 20 superfoods. |
+| [`docs/STATUS.md`](./docs/STATUS.md) | Living status: completion by area, critical path to first revenue, sprint sequence, remaining non-code blockers. |
 | [`docs/ROADMAP.md`](./docs/ROADMAP.md) | MVP scope, explicit exclusions, 8 build phases, first milestone, and the locked/pending decisions. |
 
 ## First milestone
