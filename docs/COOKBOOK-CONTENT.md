@@ -280,13 +280,25 @@ meals yet). Text not yet transcribed into this doc — flagged for the content s
   spread) → homepage/about/`/cookbook` copy.
 - **Glossary:** 4 pages (foundational concepts, substitution, supplements) → education/blog.
 - **Chef's Notes:** 4 pages → recipe colour + blog.
-- **First designed meals (~5 of 40):** Golden Morn, Spaghetti, Sweet Potato, The Avocado,
-  The Beef → the first `recipes` rows. **The remaining ~35 of 40 core meals are still
-  outstanding.**
+- **Designed core meals (~12 of 40):** Golden Morn, Spaghetti, Sweet Potato, Avocado, Beef,
+  Double Beef, Kellogg's, Multigrain Cheerios, Salmon, Steak (= *The Ultimate Steak, Avocado
+  & Pancake Feast*), Triple-Carb, Ultimate. **~28 of 40 still outstanding.**
+  *(Filenames are loose — real titles live on page 1 of each spread.)*
 
-> Like the smoothie/superfood spreads, these are page images. Transcribe to structured
-> `recipes` + `ingredients` data during the content sprint; store the JPGs in a private
-> Storage bucket for the designed-page previews.
+**Each meal is a 2-page spread that fully matches the recipe-presentation spec:**
+- **Page 1:** title · positioning subtitle · prep time · one-word descriptor · total macros
+  (kcal/protein/carb/fat) · the **+50 / −50 calorie-management table** (how to raise/lower).
+- **Page 2:** "Ingredient Breakdown & Approved Swaps" — baseline recipe with **per-ingredient
+  kcal** · allowed system swaps · **Key Micronutrient Highlights** (top-5 with sources).
+
+This is complete, seed-ready recipe data → `recipes` + `recipe_ingredients` + nutrition +
+`ingredient_substitutions`. Transcription into structured seed is a content-sprint task
+(12 meals × 2 pages to read); store the JPGs in a private Storage bucket for the designed-
+page previews. **Example captured — *The Ultimate Steak, Avocado & Pancake Feast*:** 2,230
+kcal / 114g P / 275g C / 75g F; baseline pancake batter (350g flour, 2 eggs, 1 tbsp sugar),
+6oz lean steak, 2 fried eggs, 1 avocado, honey, cooking fat; swaps cornflakes/oats,
+bacon/sausages, banana/berries, peanut butter; top nutrients B12, choline, potassium,
+zinc & iron, vitamin E.
 
 ---
 
