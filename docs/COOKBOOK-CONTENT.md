@@ -271,6 +271,25 @@ Functional Snacks** category, and a big source of recipe + ingredient data.
 
 ---
 
+## Additional delivered page assets (designed JPG spreads)
+
+Front-matter and the first fully-designed meals arrived as image spreads (not the full 40
+meals yet). Text not yet transcribed into this doc — flagged for the content sprint.
+
+- **Introduction / front-matter:** Intro, How to Use, Core Sections, Author (each a 2-page
+  spread) → homepage/about/`/cookbook` copy.
+- **Glossary:** 4 pages (foundational concepts, substitution, supplements) → education/blog.
+- **Chef's Notes:** 4 pages → recipe colour + blog.
+- **First designed meals (~5 of 40):** Golden Morn, Spaghetti, Sweet Potato, The Avocado,
+  The Beef → the first `recipes` rows. **The remaining ~35 of 40 core meals are still
+  outstanding.**
+
+> Like the smoothie/superfood spreads, these are page images. Transcribe to structured
+> `recipes` + `ingredients` data during the content sprint; store the JPGs in a private
+> Storage bucket for the designed-page previews.
+
+---
+
 ## How this maps to the build
 
 - **Ingredient tables → `ingredients` seed** (canonical_name, category, dietary_tags,
