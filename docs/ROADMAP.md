@@ -37,6 +37,30 @@ meal-plan generation · nutrition tracking · mobile app.
 
 ---
 
+## Active near-term roadmap (execution)
+
+The detailed 8-phase plan below still holds; this is the live execution view.
+
+- **Phase 1 — Foundation ✅ complete.** Next.js + Supabase + Tailwind, full schema, RLS,
+  RPCs, landing + early-access + survey, seed products. Recipe tables are now **import-ready**
+  (migration `0005`: subtitle, macro-adjustments, per-ingredient calories, nutrient
+  highlights, recipe-specific swaps) — so no schema redesign when the meals are imported.
+- **Phase 2 — Commerce 🚧 next.** Cookbook product page, Stripe Checkout, orders, webhooks,
+  PDF entitlements, physical orders, confirmation emails, bundle logic (if launching). First
+  revenue milestone. *(The `/cookbook` page is where the "real previews" — 3 recipes, 2
+  smoothies, 1 superfood — get built, using a small curated `public_preview` set rather than
+  the full import.)*
+- **Phase 3 — Content Engine (NEW).** A dedicated sprint that transforms every designed
+  spread into structured data **in one clean pass** (all 40 meals + 20 smoothies + 20
+  superfoods → `recipes`, `ingredients`, `recipe_ingredients`, nutrition, swaps, meal-plan
+  links). Ships alongside a **Cookbook CMS** (see Admin) so content is added as data, not
+  hand-written migrations — making this a reusable publishing platform for future volumes /
+  members-only content. Runs after commerce; deliberately not seeded piecemeal now.
+
+> Rationale for not seeding the 12 designed meals now: piecemeal seeding means repeated
+> migrations, reseeds, dedupe and relationship churn. Finish the cookbook → single
+> structured import → done. The **schema** is what needed to be ready now, and it is.
+
 ## Build phases
 
 | Phase | Theme | Contents |

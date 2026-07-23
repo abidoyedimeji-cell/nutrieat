@@ -394,6 +394,19 @@ Eventually: **Content** — recipes, meal plans, ingredients, substitutions, blo
 assign early-access eligibility. **Grocery (later)** — retailers, product matching, prices,
 disable dead links, review unmatched ingredients.
 
+### Cookbook CMS (part of the Content Engine sprint — Phase 3)
+
+Rather than "seed the recipes," treat the cookbook **as data** and build an internal admin
+to manage it. Per recipe: add/edit, upload hero image, add ingredients + quantities +
+per-line calories, set total macros, add nutrient highlights, add the +50/−50 macro
+adjustments, add recipe-specific swaps, assign categories + meal plans, and toggle
+**public-preview vs paid** and **published vs draft**. The DB schema already supports all of
+this (`recipes`, `recipe_ingredients`, `recipe_swaps`, `ingredient_substitutions`,
+`meal_plan_recipes`, `recipe_visibility`, `content_status`). The CMS turns a one-off
+cookbook into a **reusable publishing platform** — future volumes, seasonal recipes and
+members-only content become *more data*, not more architecture. Admin routes are
+role-protected (`/api/admin/*`) and use the service-role client.
+
 ---
 
 ## 16. Environment variables

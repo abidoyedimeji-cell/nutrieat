@@ -4,35 +4,31 @@ Living status snapshot. Planning is near-complete; the work ahead is execution.
 See [`ROADMAP.md`](./ROADMAP.md) for scope/phases/decisions, [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 for the technical design, [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) for content.
 
-## Overall: ~40%
+## Overall: ~55% — execution underway
 
-The number is dominated by planning being done and execution being at zero. Read the two
-axes separately:
-
-- **Planning / design:** ~90–95% — essentially complete.
-- **Execution (code, content authoring, assets):** ~5–10%.
+The project has moved beyond planning into execution.
 
 | Area | Progress | Note |
 | ---- | -------: | ---- |
-| Product strategy | 95% | |
+| Product strategy | 100% | |
 | Technical architecture | 95% | |
-| Database design | 90% | designed, not implemented |
-| Marketing strategy | 90% | |
-| Cookbook planning | 85% | |
-| Smoothies content | 100% | authored (20); not yet data/pages |
-| Superfoods content | 100% | authored (20); not yet data/pages |
-| Core meals content | ~25% | structure 100%; ~16/40 sampled, 6 with full method |
-| Website development | ~25% | Sprint 1: landing + early-access + survey + about + faq + legal + sitemap/robots built |
-| Database implementation | ~70% | Migrations + RLS + RPCs + seed written & build-verified; not yet applied to a live project |
-| Stripe implementation | 0% | Sprint 2 |
+| Database design | 95% | recipe tables now import-ready (migration 0005) |
+| Website foundation | 80% | Sprint 1 built (landing, early-access, survey, about, faq, legal, sitemap/robots) |
+| Commerce | 10% | Phase 2 next |
+| Core meal content | 30% | 12/40 designed spreads delivered; not yet transcribed |
+| Smoothies | 100% | 20 authored (designed spreads) |
+| Superfoods | 100% | 20 authored (designed spreads) |
+| Marketing strategy | 95% | |
+| Database implementation | ~75% | migrations + RLS + RPCs + seed + recipe-schema-ready written & build-verified; not yet applied to a live project |
 | Authentication | 0% | Phase 6 (not MVP) |
 | Blog content | 0% | ~20–30 SEO articles wanted |
-| Marketing assets | ~10% | 2 designed sections exist |
+| Marketing assets | ~15% | smoothie + superfood + 12 meal spreads exist |
 | Testing | 0% | |
-| Launch readiness | ~0% | |
+| Launch readiness | ~55% | |
 
-> "100%" on smoothies/superfoods means **content authored**, not **shipped** — they still
-> need to become `recipe_previews` rows + page assets in Storage.
+> "100%" on smoothies/superfoods and the 12 meals means **content designed** (JPG spreads),
+> not **imported** — they become structured `recipes`/`ingredients` data in the Content
+> Engine sprint (Phase 3), in one pass.
 
 ## Critical path to first revenue (narrow)
 
@@ -52,13 +48,15 @@ funnel going live. Open the funnel, run ads, collect pre-orders while content is
 
 ## Sprint sequence (agreed, with parallelisation)
 
-- **Sprint 1 — Foundation:** Next.js + Supabase + Tailwind; schema, RLS, RPCs, enums,
-  storage; Stripe wiring; public landing + early-access flow.
-- **Sprint 2 — Commerce:** cookbook product page; PDF + hardback purchasing; secure PDF
-  delivery; physical order management.
-- **Sprint 3 — Content:** finish 40 core meals + nutrition; populate recipes/ingredients/
-  meal plans; first 10–20 SEO articles. *(Runs in parallel with Sprints 1–2 where possible
-  — writing meals needs no code.)*
+- **Sprint 1 — Foundation ✅:** Next.js + Supabase + Tailwind; schema, RLS, RPCs, enums;
+  public landing + early-access flow; recipe tables made import-ready.
+- **Sprint 2 — Commerce 🚧 next:** cookbook product page (with real previews: 3 recipes /
+  2 smoothies / 1 superfood); PDF + hardback + bundle purchasing; Stripe checkout + webhook;
+  secure PDF delivery; physical order management; confirmation emails.
+- **Sprint 3 — Content Engine (new):** transform **all** designed spreads (40 meals + 20
+  smoothies + 20 superfoods) into structured data in **one clean import**, plus a **Cookbook
+  CMS** to manage content as data (reusable for future volumes / members-only). Runs after
+  commerce — not seeded piecemeal.
 - **Sprint 4 — Growth:** Meta + YouTube campaigns; search indexing; collect leads, surveys,
   pre-orders.
 
