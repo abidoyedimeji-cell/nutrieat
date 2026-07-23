@@ -7,8 +7,33 @@ content platform**, then grows into a **meal-planning and grocery-shopping ecosy
 that order, so the launch stays commercially useful without overbuilding the hard
 supermarket features before demand is proven.
 
-> **Status: planning.** This repository holds the architecture and launch spec only.
-> No application code exists yet. See [`docs/`](./docs).
+> **Status: Sprint 1 built.** The Next.js + Supabase + Tailwind foundation, the full
+> database layer (migrations, RLS, RPCs, seed) and the public landing + early-access flow
+> are in place. Commerce, blog and recipe pages are the next sprints. See [`docs/`](./docs).
+
+## Getting started
+
+```bash
+npm install
+cp .env.example .env.local     # fill in Supabase (+ survey embed) values
+npm run dev                    # http://localhost:3000
+```
+
+Apply the database layer to a Supabase project by running the files in
+`supabase/migrations/` in order, then `supabase/seed.sql`. Without Supabase env vars the
+site renders fully; only the early-access form (which calls the `create_cookbook_lead`
+RPC) needs a connected database.
+
+### What's built (Sprint 1)
+
+- **App:** Next.js 15 App Router + TypeScript + Tailwind. Pages: landing, `/early-access`,
+  `/survey` (Google-Form embed slot), `/about`, `/faq`, legal drafts, `sitemap.xml`,
+  `robots.txt`.
+- **Data layer** (`supabase/`): enums, all core tables, RLS policies, the
+  `create_cookbook_lead` / `submit_cookbook_survey` / `get_public_recipe` RPCs, and seed
+  data (5 categories, 7 retailers, ~35 ingredients, 3 meal plans, the product + 3 GBP
+  variants).
+- **API:** `POST /api/leads`, `POST /api/surveys` (call the RPCs; capture UTMs).
 
 ## Positioning
 

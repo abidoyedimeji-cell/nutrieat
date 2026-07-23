@@ -22,9 +22,9 @@ axes separately:
 | Smoothies content | 100% | authored (20); not yet data/pages |
 | Superfoods content | 100% | authored (20); not yet data/pages |
 | Core meals content | ~25% | structure 100%; ~16/40 sampled, 6 with full method |
-| Website development | 0% | |
-| Database implementation | 0% | |
-| Stripe implementation | 0% | |
+| Website development | ~25% | Sprint 1: landing + early-access + survey + about + faq + legal + sitemap/robots built |
+| Database implementation | ~70% | Migrations + RLS + RPCs + seed written & build-verified; not yet applied to a live project |
+| Stripe implementation | 0% | Sprint 2 |
 | Authentication | 0% | Phase 6 (not MVP) |
 | Blog content | 0% | ~20–30 SEO articles wanted |
 | Marketing assets | ~10% | 2 designed sections exist |
