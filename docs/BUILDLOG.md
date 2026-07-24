@@ -4,6 +4,53 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Sprint 2 — Commerce ✅
+**Status:** complete · build verified · DB flow verified
+
+**Highlights**
+- **`/cookbook` product page** (server, `force-dynamic`): hero, features, what's-included,
+  three pricing cards (PDF / Hardback / Bundle), FAQ, CTA. Prices read from Supabase
+  (service role) — never hardcoded, never from the browser.
+- **`POST /api/checkout/create`**: validates the variant, reads price + currency from the
+  DB, creates the **pending order**, then a Stripe Checkout Session using the env
+  `STRIPE_PRICE_ID_*` (physical/bundle collect shipping + offer UK £3.99 / Intl £8.99
+  options; PDF shows a launch-day note). Stores `stripe_checkout_session_id` on the order.
+- **`POST /api/stripe/webhook`**: raw-body signature verification; idempotent via
+  `payment_events` (pre-check + unique backstop; event recorded only after success so a
+  failed run safely retries). Handles `checkout.session.completed` /
+  `async_payment_succeeded` (fulfil), `async_payment_failed` / `payment_intent.payment_failed`
+  (→ `payment_failed`), `checkout.session.expired` (→ `cancelled`), `charge.refunded`
+  (→ `refunded` / `partially_refunded`). Validates currency + amount against the DB.
+  Fulfilment is idempotent (guarded order/items/entitlement).
+- **PDF entitlement**: created on payment, **locked until launch day** (`available_at` =
+  product `launch_date`, currently null = locked), **no signed URL** yet.
+- **Physical fulfilment**: shipping address/country/zone captured from the session,
+  `fulfilment_status` → `pending`, `tracking_number` left null for the distributor step.
+- **Confirmation email** via Resend (order summary, edition, amount, launch-day reminder,
+  support address) — non-fatal so a mail failure never fails the webhook.
+- **`/checkout/success`** (cosmetic — webhook is authoritative) and **`/checkout/cancelled`**.
+
+**Verification**
+- `next build` passes; types clean; 18 routes.
+- DB flow simulated against the live project (rolled back, nothing persisted):
+  PDF order pending→**paid**, order_item created, entitlement **active + locked**, duplicate
+  webhook event **deduped to 1** (idempotency), hardback fulfilment **pending**, total
+  £17.99+£3.99 = **£21.98**, GB → zone **uk**. Commerce tables confirmed empty afterward.
+- Live card-payment paths (PDF/hardback/bundle purchase, failed, cancelled, refund) require
+  the deployed environment — drive with Stripe test events / `stripe trigger` against the
+  deployed `/api/stripe/webhook` (see STATUS verification notes).
+
+**Decisions**
+- No schema changes needed — Sprint 1 tables already covered orders/items/events/
+  entitlements/shipping. (Constraint honoured: additive-only, none required.)
+- `available_at` null/future = locked, past = available (redeem RPC lands with digital
+  delivery, post-launch).
+
+**Issues / resolved**
+- Added deps `stripe@17`, `resend@4`.
+
+---
+
 ## Sprint 1 — Foundation ✅
 **Status:** complete · database live
 
@@ -40,11 +87,6 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
   write via hardened definer functions; pinned `search_path`, input validation).
 
 ---
-
-## Sprint 2 — Commerce 🚧 (next)
-Product page · Stripe Checkout (PDF + hardback + bundle) · orders · webhook (signature +
-idempotency) · PDF entitlements (launch-day gated) · physical fulfilment record ·
-confirmation emails · real previews (3 recipes / 2 smoothies / 1 superfood).
 
 ## Sprint 3 — Content Engine (planned)
 One clean structured import of 40 meals + 20 smoothies + 20 superfoods · Cookbook CMS.
