@@ -84,6 +84,26 @@ function shell(inner: string): string {
     </div>`;
 }
 
+/** Early-access welcome (Email 1). Uses the verified sender. Non-fatal. */
+export async function sendWelcomeEmail(o: { to: string; firstName?: string | null }): Promise<boolean> {
+  const hi = o.firstName ? `Hi ${o.firstName},` : "Hi,";
+  const html = shell(`
+    <h1 style="color:#E11D6B">You're on the early-access list</h1>
+    <p>${hi}</p>
+    <p>Welcome — you're now part of the early community behind <strong>My Healthy Cookbook
+    Recipe For You</strong>: performance nutrition made practical through structured meals,
+    realistic supermarket ingredients and flexible meal rotations.</p>
+    <p><strong>As an early-access member you get:</strong></p>
+    <ul>
+      <li>40% off the PDF and 20% off the hardback — locked in before public launch</li>
+      <li>First access before everyone else</li>
+      <li>Development updates, recipe previews and a say in the cookbook</li>
+    </ul>
+    <p>We'll be in touch as the cookbook develops. Want to help shape it? Your answers to our
+    short survey directly influence the recipes and features.</p>`);
+  return sendEmail({ to: o.to, subject: "You're on the early-access list 🎉", html });
+}
+
 export type OrderConfirmation = {
   to: string;
   editionLabel: string;

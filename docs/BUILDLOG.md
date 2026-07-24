@@ -92,5 +92,17 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Follow-ups (post-Sprint-2)
+- **Live production verification:** early-access signup tested on the deployed site
+  (`nutrieat-sigma.vercel.app`) — lead landed in `cookbook_leads` with correct email
+  (lowercased), name, source, preferred_format, landing_page and referrer. Full path
+  deployed app → `/api/leads` → RPC → DB confirmed working.
+- **Welcome email (Email 1) built:** `sendWelcomeEmail` via the verified Resend sender;
+  `/api/leads` sends it **once, to new signups only** (service-role existence check
+  distinguishes new vs returning), non-fatal. Closes the gap where the success UI promised
+  a welcome email that wasn't yet sent.
+
+---
+
 ## Sprint 3 — Content Engine (planned)
 One clean structured import of 40 meals + 20 smoothies + 20 superfoods · Cookbook CMS.

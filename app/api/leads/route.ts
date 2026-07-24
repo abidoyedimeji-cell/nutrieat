@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getAnonServerClient } from "@/lib/supabase/server";
+import { getAnonServerClient, getServiceClient } from "@/lib/supabase/server";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -26,12 +27,27 @@ export async function POST(request: Request) {
     : "early_access";
 
   const str = (v: unknown) => (typeof v === "string" && v.length ? v : null);
+  const normalizedEmail = email.toLowerCase();
+  const fullName = str(body.full_name);
 
   try {
+    // Detect new vs returning so the welcome email is sent once, not on every re-submit.
+    let isNewLead = false;
+    try {
+      const { data: existing } = await getServiceClient()
+        .from("cookbook_leads")
+        .select("id")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
+      isNewLead = !existing;
+    } catch {
+      // If the check fails, default to not sending (avoids duplicate emails on retry).
+    }
+
     const supabase = getAnonServerClient();
     const { data, error } = await supabase.rpc("create_cookbook_lead", {
       p_email: email,
-      p_full_name: str(body.full_name),
+      p_full_name: fullName,
       p_source: source,
       p_marketing_consent: body.marketing_consent !== false,
       p_preferred_format: str(body.preferred_format),
@@ -50,6 +66,11 @@ export async function POST(request: Request) {
         { error: "We couldn't add you right now. Please try again shortly." },
         { status: 502 },
       );
+    }
+
+    // Welcome email for genuinely new signups only (non-fatal — never blocks the signup).
+    if (isNewLead) {
+      await sendWelcomeEmail({ to: normalizedEmail, firstName: fullName });
     }
 
     return NextResponse.json({ ok: true, id: data }, { status: 201 });
