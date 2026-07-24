@@ -20,7 +20,7 @@ The project has moved beyond planning into execution.
 | Superfoods | 100% | 20 authored (designed spreads) |
 | Marketing strategy | 95% | |
 | Database implementation | ~75% | migrations + RLS + RPCs + seed + recipe-schema-ready written & build-verified; not yet applied to a live project |
-| Authentication | 0% | Phase 6 (not MVP) |
+| Authentication + accounts | 90% | Supabase magic-link auth, /account (orders + downloads), claim + redeem RPCs, launch-day-gated PDF delivery. Verified. Pending: Supabase redirect allowlist + PDF upload |
 | Blog content | 0% | ~20–30 SEO articles wanted |
 | Marketing assets | ~15% | smoothie + superfood + 12 meal spreads exist |
 | Testing | 0% | |

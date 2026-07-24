@@ -4,6 +4,39 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Accounts + Digital Delivery ✅
+**Status:** complete · build verified · RPCs verified
+
+**Highlights**
+- **Supabase Auth (passwordless magic link)** via `@supabase/ssr`: browser + cookie-bound
+  server clients, session-refresh `middleware.ts`, `/login`, `/auth/callback`,
+  `/auth/signout`.
+- **Protected `/account` area**: overview, `/account/orders` (status, edition, total,
+  fulfilment/tracking), `/account/downloads`. Layout guards auth (redirect to `/login`).
+- **`claim_my_purchases()` RPC**: on account load, attaches guest orders + entitlements to
+  the logged-in user by **case-insensitive email match** (bridges guest checkout → account).
+- **`redeem_download()` RPC + `/api/downloads/[id]`**: validates ownership, the **launch-day
+  gate** (`available_at`), and the download limit; increments the count; the route mints a
+  **15-min signed URL** from the private `cookbook-pdf` bucket (service-role only).
+- PDF stays **locked until launch day**; the downloads page shows "Unlocks on launch day".
+
+**Verification** (live DB, rolled back)
+- redeem: locked entitlement **refused** (`not_yet_available`); after unlock returns the
+  path and **increments count to 1** (limit then enforced).
+- claim: guest order + entitlement with mixed-case email attached to the authenticated
+  account (`claimed_orders=1`, `claimed_entitlements=1`).
+- `cookbook-pdf` private bucket created. Build passes (24 routes + middleware); types clean.
+
+**Open config / follow-ups**
+- **Supabase Auth redirect allowlist**: add the site URL + `…/auth/callback` under
+  Auth → URL Configuration, or magic links won't complete. (Flagged to user.)
+- Magic-link emails send via Supabase's built-in email until custom SMTP (e.g. Resend) is
+  configured — fine for testing, configure for volume.
+- The actual **PDF file** isn't uploaded to the bucket yet (nothing to deliver pre-launch);
+  upload on launch day, set `products.launch_date`, and backfill entitlement `available_at`.
+
+---
+
 ## Sprint 2 — Commerce ✅
 **Status:** complete · build verified · DB flow verified
 

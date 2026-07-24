@@ -5,6 +5,7 @@ const links = [
   { href: "/#whats-inside", label: "What's inside" },
   { href: "/about", label: "About" },
   { href: "/faq", label: "FAQ" },
+  { href: "/account", label: "Account" },
 ];
 
 export function Nav() {
