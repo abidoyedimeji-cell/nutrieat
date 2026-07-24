@@ -14,7 +14,7 @@ The project has moved beyond planning into execution.
 | Technical architecture | 95% | |
 | Database design | 95% | recipe tables now import-ready (migration 0005) |
 | Website foundation | 90% | Sprint 1 + `/cookbook` product page |
-| Commerce | 85% | Sprint 2 built + verified: product page, checkout, webhook, entitlements, fulfilment, emails. Remaining: live card-payment test on the deployed env |
+| Commerce | 85% | Sprint 2 built + verified: product page, checkout, webhook, entitlements, fulfilment, env-driven Resend emails (verified sender `oladimejisultan.org`). Remaining: live card-payment test on the deployed env |
 | Core meal content | 30% | 12/40 designed spreads delivered; not yet transcribed |
 | Smoothies | 100% | 20 authored (designed spreads) |
 | Superfoods | 100% | 20 authored (designed spreads) |

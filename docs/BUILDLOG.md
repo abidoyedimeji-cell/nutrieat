@@ -27,7 +27,11 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 - **Physical fulfilment**: shipping address/country/zone captured from the session,
   `fulfilment_status` → `pending`, `tracking_number` left null for the distributor step.
 - **Confirmation email** via Resend (order summary, edition, amount, launch-day reminder,
-  support address) — non-fatal so a mail failure never fails the webhook.
+  support address) — non-fatal so a mail failure never fails the webhook. Sender is
+  **env-driven only** (`EMAIL_FROM` / `SUPPORT_EMAIL`, verified domain `oladimejisultan.org`)
+  — no hard-coded domain; **throws clearly in production if `EMAIL_FROM` is unset**;
+  `SUPPORT_EMAIL` falls back to the sender address. A shared `sendEmail()` gives the same
+  verified sender to pre-order/payment, refund, and the future PDF-release emails.
 - **`/checkout/success`** (cosmetic — webhook is authoritative) and **`/checkout/cancelled`**.
 
 **Verification**
