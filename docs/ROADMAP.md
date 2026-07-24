@@ -50,12 +50,13 @@ The detailed 8-phase plan below still holds; this is the live execution view.
   revenue milestone. *(The `/cookbook` page is where the "real previews" — 3 recipes, 2
   smoothies, 1 superfood — get built, using a small curated `public_preview` set rather than
   the full import.)*
-- **Phase 3 — Content Engine (NEW).** A dedicated sprint that transforms every designed
-  spread into structured data **in one clean pass** (all 40 meals + 20 smoothies + 20
-  superfoods → `recipes`, `ingredients`, `recipe_ingredients`, nutrition, swaps, meal-plan
-  links). Ships alongside a **Cookbook CMS** (see Admin) so content is added as data, not
-  hand-written migrations — making this a reusable publishing platform for future volumes /
-  members-only content. Runs after commerce; deliberately not seeded piecemeal now.
+- **Phase 3 — Content Engine + CMS ✅ (built; content partial).** Cookbook CMS shipped
+  (admin env-allowlist; recipes/ingredients/meal-plans CRUD; publish/preview/validation;
+  image upload) plus an **idempotent import** (`supabase/import/content_import.sql`) from the
+  captured source: 20 superfoods (complete), 20 smoothies + 12 meals (incomplete drafts —
+  nothing invented). Public preview pages live (`/recipes`, `/recipes/[slug]`, `/cookbook`
+  section) showing only complete, published records. **Remaining:** author the ~28 missing
+  meals and fill in smoothie/meal detail via the CMS, then publish more previews.
 
 > Rationale for not seeding the 12 designed meals now: piecemeal seeding means repeated
 > migrations, reseeds, dedupe and relationship churn. Finish the cookbook → single

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getCookbookOffer, formatGBP, type VariantType } from "@/lib/commerce";
+import { getPublicPreviews } from "@/lib/recipes";
 import { PricingCards, type Plan } from "@/components/PricingCards";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,7 @@ const PLAN_ORDER: VariantType[] = ["pdf", "physical_book", "bundle"];
 
 export default async function CookbookPage() {
   const { product, variants } = await getCookbookOffer();
+  const previews = (await getPublicPreviews()).slice(0, 6);
   const byType = new Map(variants.map((v) => [v.variant_type, v]));
 
   const plans: Plan[] = PLAN_ORDER.flatMap((type) => {
@@ -113,6 +115,31 @@ export default async function CookbookPage() {
           </ul>
         </div>
       </section>
+
+      {previews.length > 0 && (
+        <section className="container-content py-16">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-extrabold">A free taste</h2>
+              <p className="mt-2 text-brand-ink/70">Selected previews from inside the cookbook.</p>
+            </div>
+            <Link href="/recipes" className="hidden text-sm font-semibold text-brand-purple sm:block">
+              See all previews →
+            </Link>
+          </div>
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {previews.map((p) => (
+              <Link key={p.slug} href={`/recipes/${p.slug}`} className="rounded-2xl border border-black/10 p-6 transition hover:border-brand-pink">
+                {p.category && (
+                  <span className="text-xs font-semibold uppercase tracking-wide text-brand-purple">{p.category.name}</span>
+                )}
+                <h3 className="mt-2 text-lg font-bold">{p.title}</h3>
+                {p.summary && <p className="mt-2 line-clamp-2 text-sm text-brand-ink/70">{p.summary}</p>}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section id="pricing" className="container-content py-20">
         <div className="mx-auto mb-10 max-w-2xl text-center">

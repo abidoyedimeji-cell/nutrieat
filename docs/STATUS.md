@@ -15,9 +15,10 @@ The project has moved beyond planning into execution.
 | Database design | 95% | recipe tables now import-ready (migration 0005) |
 | Website foundation | 90% | Sprint 1 + `/cookbook` product page |
 | Commerce | 85% | Sprint 2 built + verified: product page, checkout, webhook, entitlements, fulfilment, env-driven Resend emails (verified sender `oladimejisultan.org`). Remaining: live card-payment test on the deployed env |
-| Core meal content | 30% | 12/40 designed spreads delivered; not yet transcribed |
-| Smoothies | 100% | 20 authored (designed spreads) |
-| Superfoods | 100% | 20 authored (designed spreads) |
+| Content Engine + CMS | 90% | Admin CMS built (recipes/ingredients/meal-plans), idempotent import run, public previews live; ~28 meals still to author |
+| Core meal content | 30% | 12/40 imported as drafts (1 with captured detail); 28 outstanding |
+| Smoothies | 100% authored / imported | 20 imported as incomplete drafts (lists only) |
+| Superfoods | 100% authored / imported | 20 imported complete; 3 published as public previews |
 | Marketing strategy | 95% | |
 | Database implementation | ~75% | migrations + RLS + RPCs + seed + recipe-schema-ready written & build-verified; not yet applied to a live project |
 | Authentication + accounts | 90% | Supabase magic-link auth, /account (orders + downloads), claim + redeem RPCs, launch-day-gated PDF delivery. Verified. Pending: Supabase redirect allowlist + PDF upload |
@@ -55,10 +56,11 @@ funnel going live. Open the funnel, run ads, collect pre-orders while content is
   physical order/shipping capture; Resend confirmation emails. Build + DB-flow verified.
   *(Real recipe/smoothie previews deferred to the Content Engine sprint — they need the
   content import; not on the commerce critical path.)*
-- **Sprint 3 — Content Engine (new):** transform **all** designed spreads (40 meals + 20
-  smoothies + 20 superfoods) into structured data in **one clean import**, plus a **Cookbook
-  CMS** to manage content as data (reusable for future volumes / members-only). Runs after
-  commerce — not seeded piecemeal.
+- **Sprint 3 — Content Engine + CMS ✅ (partial content):** Cookbook CMS built (admin
+  allowlist, recipes/ingredients/meal-plans CRUD, publish/preview); idempotent import ran
+  (20 superfoods complete, 20 smoothies + 12 meals as incomplete drafts); public previews
+  live. Remaining: author the ~28 missing meals and complete smoothie/meal detail via the
+  CMS, then publish more previews.
 - **Sprint 4 — Growth:** Meta + YouTube campaigns; search indexing; collect leads, surveys,
   pre-orders.
 

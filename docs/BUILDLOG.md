@@ -4,6 +4,49 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Content Engine + CMS ✅
+**Status:** complete · typecheck + tests + build pass · DB verified
+
+**Admin auth (temporary env allowlist)**
+- `ADMIN_EMAILS` (comma-separated), read **server-side only**; pure logic in
+  `lib/admin-allowlist.ts` (normalise/trim/lowercase, empty ⇒ deny all). `requireAdminPage()`
+  guards every `/admin` page; `assertAdmin()` guards every server action. Admin writes use
+  the service-role client **after** the allowlist check. Unit-tested (5 tests).
+
+**Migration 0008 (additive)** — recipes: `import_status`, `admin_note`, `source_title`,
+`source_filename`, `updated_at`; ingredients: `aliases`, `image_url`; public `recipe-images`
+bucket. No drops/renames. `macro_adjustments`/`nutrient_highlights` stay JSONB (approved).
+
+**CMS** (`/admin`): dashboard; recipes list + create + full editor (all fields, macros,
+JSONB macro-adjustments/nutrient-highlights, visibility, import_status, admin note,
+per-ingredient add/remove with calories, recipe-specific swaps, image upload, publish/
+archive **with validation**, preview link); ingredients list/create/edit (aliases, tags,
+image, global substitutions); meal-plans list/edit (recipe assignment). Server actions,
+`revalidatePath`. Publish is blocked for `incomplete` recipes (enforces the no-incomplete
+rule in the CMS too).
+
+**Import** (`supabase/import/content_import.sql`, idempotent, honest — nothing invented):
+- **20 superfoods** → complete, category superfoods.
+- **20 smoothies** → ingredient lists only (144 links) → `incomplete` drafts + admin_note.
+- **12 meals** → title/source only (1, *The Ultimate Steak…*, carries captured macros +
+  nutrients + 4 swaps) → all `incomplete` drafts.
+- Report: 52 recipes (20 complete / 32 incomplete), 81 ingredients. **Idempotent verified**
+  — re-run produced identical counts (distinct_slugs = 52, no duplicates).
+
+**Public previews**: `/recipes` + `/recipes/[slug]` (RLS-bound anon reads), preview section
+on `/cookbook`, dynamic sitemap. Published 3 complete superfoods as `public_preview`.
+**Data rules honoured**: only complete records published; smoothies/meals held as drafts.
+
+**Verification**
+- typecheck clean; **5/5 tests pass**; `next build` passes (34 routes + middleware).
+- **RLS isolation** (as `anon`): sees only the 3 published previews; **0** paid recipes,
+  drafts, recipe_ingredients or swaps. Paid content is unreachable publicly (queries,
+  sitemap, metadata).
+- Admin allowlist unit-tested (authorised/unauthorised/empty/null). Live click-through of
+  the admin UI needs a signed-in allowlisted session (magic-link redirect allowlist pending).
+
+---
+
 ## Accounts + Digital Delivery ✅
 **Status:** complete · build verified · RPCs verified
 

@@ -404,8 +404,24 @@ adjustments, add recipe-specific swaps, assign categories + meal plans, and togg
 this (`recipes`, `recipe_ingredients`, `recipe_swaps`, `ingredient_substitutions`,
 `meal_plan_recipes`, `recipe_visibility`, `content_status`). The CMS turns a one-off
 cookbook into a **reusable publishing platform** — future volumes, seasonal recipes and
-members-only content become *more data*, not more architecture. Admin routes are
-role-protected (`/api/admin/*`) and use the service-role client.
+members-only content become *more data*, not more architecture.
+
+**Admin authorization — temporary env allowlist.** Until the team grows, admin access is an
+environment allowlist: **`ADMIN_EMAILS`** (comma-separated), read **server-side only** and
+never exposed to the browser (no `NEXT_PUBLIC_`). Parsing normalises to lowercase + trims;
+an empty/unset allowlist denies everyone. Every `/admin` page uses `requireAdminPage()`
+(redirects non-admins) and every mutation server action calls `assertAdmin()` (throws → the
+UI surfaces it). Admin writes use the **service-role** client *after* the allowlist check,
+so RLS still blocks everyone else. Replace with a `profiles.is_admin` column / role model
+when more than a couple of admins are needed — the guard is centralised in `lib/admin.ts`,
+so swapping the check is a one-file change. The pure allowlist logic lives in
+`lib/admin-allowlist.ts` and is unit-tested.
+
+**Import (`supabase/import/content_import.sql`)** is idempotent (upsert by stable slug;
+smoothie links rebuilt each run) and honest: it never invents data — incomplete source →
+`content_status='draft'` + `import_status='incomplete'` + an `admin_note`. Recipe additive
+fields (`import_status`, `admin_note`, `source_title`, `source_filename`) live in migration
+`0008`; imagery goes to the public `recipe-images` bucket.
 
 ---
 
