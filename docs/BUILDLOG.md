@@ -4,6 +4,27 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Blog / SEO Engine ✅
+**Status:** complete · typecheck + tests + build pass · DB verified
+
+**Public** — `/blog` (index) + `/blog/[slug]` (article) rendering from `blog_posts` via the
+anon RLS-bound client (published-only). Per-article `generateMetadata` (SEO title/desc,
+canonical, Open Graph) + **Article JSON-LD**. Conversion CTAs (pre-order + early-access) on
+every article. Nav gains Previews + Blog; sitemap now lists published recipes **and** posts.
+
+**Admin** — `/admin/blog` list + create + editor (title, slug, excerpt, HTML body, category,
+author, SEO fields, canonical, cover image, publish/unpublish). Publish validates
+title+slug+body and stamps `published_at`. Server actions, admin-guarded.
+
+**Seed** (grounded in the captured glossary — not invented): 5 blog categories + 2 published
+articles ("The Macro Trinity", "The Lego approach to eating"), measured wording per the
+health-claims caveat.
+
+**Verification** — typecheck clean; 5/5 tests; build passes (39 routes). As `anon`: 2
+published posts visible, **0 non-published leak**.
+
+---
+
 ## Content Engine + CMS ✅
 **Status:** complete · typecheck + tests + build pass · DB verified
 

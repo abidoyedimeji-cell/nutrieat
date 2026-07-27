@@ -2,9 +2,9 @@ import Link from "next/link";
 
 const links = [
   { href: "/cookbook", label: "The Cookbook" },
-  { href: "/#whats-inside", label: "What's inside" },
+  { href: "/recipes", label: "Previews" },
+  { href: "/blog", label: "Blog" },
   { href: "/about", label: "About" },
-  { href: "/faq", label: "FAQ" },
   { href: "/account", label: "Account" },
 ];
 

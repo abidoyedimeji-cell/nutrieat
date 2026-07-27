@@ -94,3 +94,31 @@ export async function getRecipesLite() {
   const { data } = await s.from("recipes").select("id, title").order("title");
   return data ?? [];
 }
+
+// ---- Blog ----
+export async function getBlogCategories() {
+  const s = getServiceClient();
+  const { data } = await s.from("blog_categories").select("id, name, slug").order("name");
+  return data ?? [];
+}
+
+export async function getAuthors() {
+  const s = getServiceClient();
+  const { data } = await s.from("authors").select("id, name").order("name");
+  return data ?? [];
+}
+
+export async function getAdminBlogPosts() {
+  const s = getServiceClient();
+  const { data } = await s
+    .from("blog_posts")
+    .select("id, title, slug, status, published_at, category:blog_categories(name)")
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+export async function getAdminBlogPost(id: string) {
+  const s = getServiceClient();
+  const { data } = await s.from("blog_posts").select("*").eq("id", id).maybeSingle();
+  return data;
+}

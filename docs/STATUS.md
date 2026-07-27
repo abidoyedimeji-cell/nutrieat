@@ -22,7 +22,7 @@ The project has moved beyond planning into execution.
 | Marketing strategy | 95% | |
 | Database implementation | ~75% | migrations + RLS + RPCs + seed + recipe-schema-ready written & build-verified; not yet applied to a live project |
 | Authentication + accounts | 90% | Supabase magic-link auth, /account (orders + downloads), claim + redeem RPCs, launch-day-gated PDF delivery. Verified. Pending: Supabase redirect allowlist + PDF upload |
-| Blog content | 0% | ~20–30 SEO articles wanted |
+| Blog / SEO engine | 85% | Blog system built (public pages, SEO + JSON-LD, admin CMS); 2 seed articles published. Remaining: author ~20 articles |
 | Marketing assets | ~15% | smoothie + superfood + 12 meal spreads exist |
 | Testing | 0% | |
 | Launch readiness | ~55% | |

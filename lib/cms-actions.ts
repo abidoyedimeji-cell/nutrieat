@@ -268,6 +268,66 @@ export async function removeMealPlanRecipe(mealPlanId: string, rowId: string) {
   revalidatePath(`/admin/meal-plans/${mealPlanId}`);
 }
 
+// ---------------------------------------------------------------- Blog
+export async function createBlogPost(formData: FormData) {
+  await assertAdmin();
+  const title = str(formData.get("title"));
+  if (!title) throw new Error("Title is required.");
+  const slug = str(formData.get("slug")) ?? slugify(title);
+  const supabase = getServiceClient();
+  const { data, error } = await supabase
+    .from("blog_posts")
+    .insert({ title, slug, status: "draft" })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/blog");
+  redirect(`/admin/blog/${data.id}`);
+}
+
+export async function updateBlogPost(id: string, formData: FormData) {
+  await assertAdmin();
+  const title = str(formData.get("title"));
+  if (!title) throw new Error("Title is required.");
+  const supabase = getServiceClient();
+  const { error } = await supabase
+    .from("blog_posts")
+    .update({
+      title,
+      slug: str(formData.get("slug")),
+      excerpt: str(formData.get("excerpt")),
+      body: str(formData.get("body")),
+      author_id: str(formData.get("author_id")),
+      category_id: str(formData.get("category_id")),
+      seo_title: str(formData.get("seo_title")),
+      seo_description: str(formData.get("seo_description")),
+      canonical_url: str(formData.get("canonical_url")),
+      cover_image_url: str(formData.get("cover_image_url")),
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/blog");
+  revalidatePath(`/admin/blog/${id}`);
+}
+
+export async function setBlogStatus(id: string, status: "draft" | "published" | "archived") {
+  await assertAdmin();
+  const supabase = getServiceClient();
+  if (status === "published") {
+    const { data: p } = await supabase.from("blog_posts").select("title, slug, body").eq("id", id).single();
+    if (!p?.title || !p?.slug || !p?.body) {
+      throw new Error("Cannot publish: title, slug and body are required.");
+    }
+  }
+  const patch: Record<string, unknown> = { status };
+  if (status === "published") patch.published_at = new Date().toISOString();
+  const { error } = await supabase.from("blog_posts").update(patch).eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/blog");
+  revalidatePath(`/admin/blog/${id}`);
+  revalidatePath("/blog");
+}
+
 // ---------------------------------------------------------------- Image upload
 export async function uploadRecipeImage(recipeId: string, formData: FormData) {
   await assertAdmin();
