@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublicRecipe } from "@/lib/recipes";
+import { getRetailers, type ShoppingItem } from "@/lib/shopping";
+import { ShopList } from "@/components/ShopList";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +33,15 @@ export default async function RecipePreviewPage({
   const ingredients = [...recipe.recipe_ingredients].sort(
     (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
   );
+  const retailers = ingredients.length > 0 ? await getRetailers() : [];
+  const shopItems: ShoppingItem[] = ingredients
+    .filter((ri) => ri.ingredient?.canonical_name)
+    .map((ri) => ({
+      name: ri.ingredient!.canonical_name,
+      term: ri.ingredient!.canonical_name,
+      quantity: ri.quantity,
+      unit: ri.unit,
+    }));
   const swaps = [...recipe.recipe_swaps].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   const hasMacros = recipe.calories != null;
 
@@ -78,6 +89,16 @@ export default async function RecipePreviewPage({
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {shopItems.length > 0 && (
+        <section className="mt-10 rounded-2xl border border-black/10 p-6">
+          <h2 className="text-xl font-bold">Shop the ingredients</h2>
+          <p className="mt-1 text-sm text-brand-ink/60">Search each item at your supermarket, or copy the list.</p>
+          <div className="mt-4">
+            <ShopList items={shopItems} retailers={retailers} exportHeading={recipe.title} />
+          </div>
         </section>
       )}
 

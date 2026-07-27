@@ -5,7 +5,7 @@ import { getPublishedPosts } from "@/lib/blog";
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const staticRoutes = ["", "/cookbook", "/recipes", "/blog", "/early-access", "/survey", "/about", "/faq"];
+  const staticRoutes = ["", "/cookbook", "/recipes", "/blog", "/shop", "/shop/ingredients", "/early-access", "/survey", "/about", "/faq"];
   const base: MetadataRoute.Sitemap = staticRoutes.map((path) => ({
     url: `${siteUrl}${path}`,
     changeFrequency: "weekly",

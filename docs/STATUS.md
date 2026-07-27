@@ -64,8 +64,14 @@ funnel going live. Open the funnel, run ads, collect pre-orders while content is
 - **Sprint 4 — Growth:** Meta + YouTube campaigns; search indexing; collect leads, surveys,
   pre-orders.
 
-After that: shopping assistant, customer dashboards, grocery integration — added on real
-demand, not assumptions.
+- **Grocery / Shopping Assistant — Level 1–2 ✅:** shopping-list export (copy / WhatsApp) +
+  per-ingredient supermarket search links across 7 UK retailers; `/shop`, `/shop/ingredients`,
+  and a "Shop the ingredients" section on recipe pages. Affiliate-ready (raw links until a
+  network is approved). Levels 3–6 out of scope.
+
+All four growth phases (Accounts+Delivery, Content+CMS, Blog, Grocery L1–2) are built.
+Remaining is content depth (the ~28 meals, more blog articles) and monetisation config
+(affiliate network) — added on real demand, not assumptions.
 
 ## Non-code blockers still open
 

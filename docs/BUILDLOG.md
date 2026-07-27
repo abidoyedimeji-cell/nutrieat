@@ -4,6 +4,30 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Grocery / Shopping Assistant — Level 1–2 ✅
+**Status:** complete · typecheck + tests + build pass · DB verified
+
+**Level 1 (shopping list)** — combined ingredient list from structured `recipe_ingredients`;
+`ShoppingListExport` (client) offers **Copy list** and **Share to WhatsApp**.
+
+**Level 2 (retailer search links)** — migration `0009` adds `retailers.search_url_template`
+(`{q}` placeholder) for the 7 UK supermarkets (Tesco, Sainsbury's, Asda, Morrisons, Iceland,
+Ocado, Waitrose). `retailerSearchUrl()` builds a per-ingredient search URL; links are
+`rel="…sponsored"` and open the retailer's own site.
+
+**Pages** — `/shop` (assistant landing + supported retailers), `/shop/ingredients` (all 81
+ingredients, each with retailer links + export), and a **"Shop the ingredients"** section on
+recipe preview pages. Footer + sitemap updated.
+
+**Affiliate-ready, not yet monetised** — `wrapAffiliate()` is a documented no-op passthrough;
+drop in Awin/Sovrn wrapping (+ an env publisher id) when a network is approved. No affiliate
+network is configured, so links are currently raw. Levels 3–6 remain out of scope.
+
+**Verification** — typecheck clean; 5/5 tests; build passes (41 routes). All 7 retailers have
+templates; sample URL builds correctly (`…/search?query=chicken%20breast`).
+
+---
+
 ## Blog / SEO Engine ✅
 **Status:** complete · typecheck + tests + build pass · DB verified
 
