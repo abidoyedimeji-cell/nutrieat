@@ -58,6 +58,14 @@ export default async function RecipePreviewPage({
       {recipe.subtitle && <p className="mt-2 text-lg text-brand-ink/70">{recipe.subtitle}</p>}
       {recipe.summary && <p className="mt-4 text-brand-ink/75">{recipe.summary}</p>}
 
+      {recipe.instructions && (
+        <div className="mt-6 space-y-1 rounded-2xl bg-brand-cream/50 p-5 text-sm text-brand-ink/80">
+          {recipe.instructions.split("\n").filter(Boolean).map((line, i) => (
+            <p key={i}>{line}</p>
+          ))}
+        </div>
+      )}
+
       {hasMacros && (
         <dl className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
