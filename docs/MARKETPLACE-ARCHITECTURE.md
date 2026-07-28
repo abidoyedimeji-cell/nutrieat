@@ -13,6 +13,14 @@ by default; cross-merchant isolation mandatory; item-level fulfilment + rejectio
 platform inventory separate from merchant inventory; **discovery radius ≠ delivery eligibility**;
 cookbook and marketplace orders stay in **separate** lifecycles.
 
+> **Amendment 1 (2026-07-28) — CONFIRMED decisions folded in.** Town-centre hub model (Eltham /
+> Dartford / Erith), hub-based 5-mile discovery separated from delivery eligibility; hub-based
+> waitlist (no votes counter); merchant-suggestion lifecycle; the full 10-role DB-backed model
+> (super-admin bootstrap `abidoyedimeji`); three-level delivery confirmation; a fully-audited
+> **returns** lifecycle; refund scope + **fee-refund/override** rules; and the reconfirmed payout
+> lifecycle. These are **confirmed, not assumptions**. See [`MARKETPLACE-DECISIONS.md`](./MARKETPLACE-DECISIONS.md)
+> §Amendment-1 change summary.
+
 ---
 
 ## 1. What already exists (audited baseline)
@@ -55,17 +63,17 @@ Key audit findings that shape this spec:
 | 9 | Driver logistics | `routes`(N), `collection_tasks`(N), `delivery_tasks`(N) | Driver |
 | 10 | Evidence & media | `evidence_media`(N) | All |
 | 11 | Delivery & collection | `delivery_slots`(N) | Ops |
-| 12 | Customer confirmation | `item_confirmations`(N) | Customer |
-| 13 | Rejections & refunds | `item_rejections`(N), `refunds`(N) | Customer/Ops |
+| 12 | Customer confirmation | `order_confirmations`(N), `item_confirmations`(N) | Customer |
+| 13 | Rejections, returns & refunds | `item_rejections`(N), `item_returns`(N), `refunds`(N) | Customer/Ops |
 | 14 | Payments | `market_payment_events`(N), `market_orders`(E) | Platform |
 | 15 | Stripe Connect | `connect_accounts`(N), `merchants`(E) | Merchant/Platform |
 | 16 | Merchant settlements | `merchant_settlements`(N), `merchant_transfers`(N), `settlement_adjustments`(N); `market_payouts`(E, legacy) | Finance |
-| 17 | Referrals | `referrals`(E), `referral_codes`(N) | Customer |
+| 17 | Referrals & acquisition | `referrals`(E), `referral_codes`(N), `location_waitlist`(E), `merchant_suggestions`(E), `merchant_referral_milestones`(N) | Customer |
 | 18 | Rewards | `reward_ledger`(E), `reward_redemptions`(E), `reward_catalogue`(N) | Customer |
 | 19 | Support | `support_cases`(N), `support_messages`(N) | Support |
 | 20 | Notifications | `notifications`(N) | Platform |
 | 21 | Audit & compliance | `audit_events`(N) | Platform |
-| 22 | Geography | `launch_areas`(E), `service_zones`(N) | Ops |
+| 22 | Geography (hubs) | `launch_areas`(E, = hubs), `user_addresses`(E), `service_zones`(N) | Ops |
 
 ---
 
@@ -77,16 +85,32 @@ service-role/RPC unless a policy is stated. `exists?` = new unless noted.
 
 ### Context 1 — Identity & access
 
-**`platform_staff`** (N) — replaces the temporary `ADMIN_EMAILS` allowlist.
-- PK `id`; FK `user_id → auth.users`; `role platform_role`; `is_active bool`; `created_at`.
-- U `(user_id)`. RLS: self-read; writes admin-only. IX `(role)`.
-- Note: keep `ADMIN_EMAILS` as a bootstrap fallback until seeded (DECISIONS).
+**DB-backed roles are mandatory** (the `ADMIN_EMAILS` allowlist is kept only as a bootstrap
+fallback until `super_admin` is seeded). The 10 confirmed roles split across three tables:
 
-**`merchant_staff`** (N) — cross-merchant isolation boundary.
+| Role | Table | Scope |
+|------|-------|-------|
+| `super_admin` | `platform_staff` | Everything; bootstrap identity **`abidoyedimeji`** (resolve to a real Supabase user id + verified email at implementation) |
+| `platform_admin` | `platform_staff` | Platform-wide admin, below super_admin |
+| `operations_staff` | `platform_staff` | Ops: onboarding, routing, inventory, disputes |
+| `finance_staff` | `platform_staff` | Settlements, refunds, transfers |
+| `support_staff` | `platform_staff` | Support cases |
+| `merchant_admin` | `merchant_staff` | Manages **only the merchant orgs/stores explicitly assigned** |
+| `merchant_manager` | `merchant_staff` | Catalogue + order queue for assigned store |
+| `merchant_picker` | `merchant_staff` | Picking/packing only |
+| `driver` | `drivers` | Assigned routes/tasks only |
+| `customer` | (default authenticated user) | Own orders/rewards |
+
+**`platform_staff`** (N) — PK `id`; FK `user_id → auth.users`; `role platform_role`;
+`is_active bool`; `created_at`. U `(user_id, role)`. RLS: self-read; writes super_admin/platform_admin.
+IX `(role)`. **Super-admin bootstrap:** first row seeded for `abidoyedimeji` (`super_admin`).
+
+**`merchant_staff`** (N) — cross-merchant isolation boundary; a `merchant_admin` is assigned per
+merchant here (a person may admin several merchants = several rows).
 - PK `id`; FK `merchant_id → merchants`, `user_id → auth.users`; `role merchant_staff_role`;
   `status` (`invited|active|revoked`); `invited_by`, `created_at`.
 - U `(merchant_id, user_id)`. IX `(user_id)`, `(merchant_id)`. **This table is the join used by
-  every merchant-scoped RLS policy.**
+  every merchant-scoped RLS policy.** Merchant A staff can never resolve into Merchant B's rows.
 
 **`drivers`** (N) — PK `id`; FK `user_id → auth.users` U; `status` (`active|inactive|suspended`);
 `vehicle_reg`, `phone`; `created_at`. RLS: self-read.
@@ -215,25 +239,51 @@ like `refund_pending` become events, not enum values).
   `capacity int`, `booked_count int default 0 CK(>=0)`; `is_open bool`.
 - U `(service_area_id, date, window)`. Booking increments `booked_count` in the order RPC.
 
-### Context 12 — Customer confirmation
+### Context 12 — Customer confirmation (three levels)
 
-**`item_confirmations`** (N) — PK `id`; FK `item_id`, `user_id`;
+At delivery the customer may act at **three granularities — full order, merchant sub-order, or
+individual item** — and must never be forced to reject a whole order over one bad item. Bulk
+actions (accept-all / reject-order / reject-sub-order) **fan out to item-level rows** so the
+truth is always item-level; the scope of the action is recorded for audit.
+
+**`order_confirmations`** (N) — records a customer's bulk confirmation action + its scope.
+- PK `id`; FK `market_order_id`, `user_id`, `sub_order_id` (nullable);
+  `scope` (`order|sub_order|item`); `action` (`accept_all|reject_order|reject_sub_order|
+  reject_items|request_return|report_issue|approve_substitution|reject_substitution`);
+  `status customer_confirmation_status`; `created_at`. RLS owner.
+
+**`item_confirmations`** (N) — the per-item truth. PK `id`; FK `item_id`, `user_id`,
+`order_confirmation_id` (nullable, the bulk action that produced it);
 `decision` (`accepted|rejected`); `confirmed_at`; `evidence_id` (nullable). U `(item_id)` (one
-final decision). RLS owner. Auto-confirm job writes with `decision='accepted'` + a system actor
-after the confirmation window lapses.
+final decision). RLS owner. Auto-confirm job writes `accepted` + system actor after the window.
 
-### Context 13 — Rejections & refunds
+### Context 13 — Rejections, returns & refunds
 
 **`item_rejections`** (N) — PK `id`; FK `item_id`, `user_id`;
 `reason rejection_reason`; `note text`; `evidence_id`; `qty_rejected int`;
 `status rejection_status`; `reviewed_by`, `reviewed_at`, `merchant_response text`; `created_at`.
 IX `(item_id)`, `(status)`.
 
-**`refunds`** (N) — **idempotent money-out ledger.**
-- PK `id`; FK `market_order_id`, `item_id` (nullable = order-level), `rejection_id` (nullable);
-  `amount_cents ¢`; `reason text`; `status refund_status`; `stripe_refund_id text U`;
+**`item_returns`** (N) — **manually handled by the platform team, but fully represented + audited.**
+Distinct from a rejection: a return is a physical good going back to the merchant.
+- PK `id`; FK `item_id`, `market_order_id`, `target_merchant_id`, `rejection_id` (nullable),
+  `assigned_operator_id` (driver/ops), `customer_evidence_id`, `merchant_evidence_id` (nullable);
+  `quantity int`; `reason text`; `status return_status`;
+  `collection_time timestamptz`; `return_deadline timestamptz` (**normally end of operating day**);
+  `merchant_confirmed_at`; `financial_adjustment_cents ¢`; `admin_notes text`; `created_at`.
+- IX `(target_merchant_id, status)`, `(market_order_id)`. Return-to-merchant target is same-day.
+
+**`refunds`** (N) — **idempotent money-out ledger; scoped + fee-aware.**
+- PK `id`; FK `market_order_id`, `item_id` (nullable), `sub_order_id` (nullable),
+  `rejection_id` (nullable), `return_id` (nullable);
+  `scope` (`item|multi_item|sub_order|order`); `refund_type` (`full|partial`);
+  `product_value_cents ¢`; `fee_refund_cents ¢ default 0`; `amount_cents ¢` (product + any fee);
+  `is_fee_override bool default false`; `fee_override_component text`; `fee_override_reason text`;
+  `fee_override_by uuid`; `reason text`; `status refund_status`; `stripe_refund_id text U`;
   `idempotency_key text U`; `approved_by`, `created_at`, `completed_at`.
-- IX `(market_order_id)`. A refund reduces the merchant's `accepted_subtotal_cents` and thus payout.
+- IX `(market_order_id)`. A refund reduces the merchant's `accepted_subtotal_cents` and thus payout,
+  and **triggers payout reconfirmation** (§4.2). **Service fees are retained by default** — a fee
+  refund only occurs via `is_fee_override` (authorised actor + reason + amount + timestamp + audit).
 
 ### Context 14 — Payments
 
@@ -285,6 +335,33 @@ rollup view feeder or deprecate in favour of `merchant_settlements` (DECISIONS).
 `window_clears_at timestamptz` (post-launch cancellation-window gate). Existing: `referrer_user_id`,
 `referred_user_id`, `code`, `regime`, `qualifying_event`, `status referral_status`, `qualified_at`.
 
+**`location_waitlist`** (E) — **hub-based waitlist. One active membership per user/email per hub;
+demand = COUNT of unique active entries (no votes counter).**
+- Extend the 0010 table with: `launch_area_id → launch_areas` (the **hub**), `status waitlist_status`,
+  `source text`, `referral_code text`, `joined_at timestamptz`, `invited_at`, `activated_at`,
+  `opted_out_at`. Existing: `user_id`, `email`, `town`, `postcode`, `created_at`.
+- **U `(user_id, launch_area_id)` and U `(lower(email), launch_area_id)` WHERE `status in
+  ('pending','invited')`** (partial unique — one *active* membership per hub). **No `votes`
+  column** (resolves audit X4 — CONFIRMED). Demand per hub = `count(*) where status in
+  ('pending','invited')`. Flow: postcode → nearest/supported hub → access check → request →
+  `pending`; ops invite → `invited`; access granted → `activated`; leave → `opted_out`.
+
+**`merchant_suggestions`** (E of 0010 `merchant_referrals`) — customers suggest/refer local merchants.
+- Extend with: `category text`, `address text`, `location geography(Point,4326)`, `website text`,
+  `social_profile text`, `referral_code text`, `referral_url text`, `qr_code_path text`,
+  `duplicate_of uuid` (self-FK, set by duplicate detection), `onboarded_merchant_id → merchants`
+  (nullable, the outcome), `status merchant_suggestion_status`. Existing: `merchant_name`, `contact`,
+  `town`, `note`, `referrer_user_id`, `created_at`.
+- IX `(status)`, GiST `(location)`, `(lower(merchant_name))` for dedupe. **Reward is NOT awarded on
+  submission** — milestones (below) gate it.
+
+**`merchant_referral_milestones`** (N) — separates the reward-bearing stages of a suggestion.
+- PK `id`; FK `suggestion_id → merchant_suggestions`, `referrer_user_id`;
+  `milestone` (`suggestion_submitted|merchant_contacted|onboarding_completed|merchant_activated|
+  first_completed_order`); `reached_at`; `reward_points int default 0`; `rewarded bool default false`.
+- U `(suggestion_id, milestone)`. Reward accrual fires on `onboarding_completed`/`merchant_activated`/
+  `first_completed_order`, never on `suggestion_submitted`.
+
 ### Context 18 — Rewards
 
 **`reward_ledger`** (E) — add `expires_at`, `reference_type`, `reference_id` for traceability.
@@ -319,15 +396,38 @@ registry lives in code); `title`, `body`; `channel` (`email|push|in_app`); `payl
 `entity_type`, `entity_id`; `metadata jsonb`; `ip inet`; `created_at`. IX `(entity_type, entity_id)`,
 `(actor_user_id, created_at)`. **No UPDATE/DELETE for anyone.** Written by every privileged RPC.
 
-### Context 22 — Geography
+### Context 22 — Geography (town-centre hubs)
 
-**`launch_areas`** (E) — no structural change (has `centroid`, `is_live`).
+**Hubs are the anchor, not merchants.** Discovery is **5 miles from a town-centre hub**, not from
+each merchant. The confirmed model keeps these as **separate** concepts:
 
-**`service_zones`** (N) — **separates discovery from delivery/collection eligibility.**
-- PK `id`; FK `launch_area_id`; `type service_area_type` (`discovery|delivery|collection|route`);
-  `area geography(Polygon,4326)` (or `radius_m int` for a circular zone); `is_active bool`.
-- IX GiST `(area)`. A postcode inside a `discovery` zone can browse; ordering requires it to be
-  inside an active `delivery` (or `collection`) zone. **5-mile discovery does not imply delivery.**
+| Concept | Where |
+|---------|-------|
+| Town-centre hub (Eltham / Dartford / Erith) | `launch_areas` row |
+| Hub coordinates | `launch_areas.centroid` |
+| 5-mile discovery area | `service_zones` type `discovery` (radius from hub centroid) |
+| Customer postcode coordinates | `user_addresses.location` |
+| Nearest hub | `user_addresses.nearest_hub_id` (computed at save) |
+| Customer-to-hub distance | `user_addresses.hub_distance_m` |
+| Delivery eligibility | inside an **active** `delivery` `service_zone` (stricter) |
+| Collection eligibility | inside a `collection` zone + merchant `collection_enabled` |
+| Delivery service zones | `service_zones` type `delivery` |
+| Route coverage | `service_zones` type `route` (which zones a live route serves today) |
+
+**`launch_areas`** (E) — now the **hub** table. Add `is_hub bool default true`,
+`hub_postcode text`. Existing: `name`, `slug`, `centroid`, `is_live`. Seeded: Eltham, Dartford, Erith.
+
+**`user_addresses`** (E) — add `nearest_hub_id → launch_areas`, `hub_distance_m int`,
+`type address_type`. Existing: `location`, `postcode`, etc. Nearest hub + distance computed at
+save (never at query time).
+
+**`service_zones`** (N) — **separates discovery from delivery/collection/route eligibility.**
+- PK `id`; FK `launch_area_id` (the hub); `type service_area_type`
+  (`discovery|delivery|collection|route`); `area geography(Polygon,4326)` **or** `radius_m int`
+  (circular, for the 5-mile discovery); `is_active bool`.
+- IX GiST `(area)`. **A customer inside the 5-mile discovery radius may still be OUTSIDE an active
+  `delivery` zone / route** — discovery ≠ delivery eligibility (locked). Ordering re-checks the
+  delivery/collection zone + route coverage at basket-price time, not just discovery.
 
 ---
 
@@ -341,7 +441,9 @@ core list, item sub-statuses like `refund_pending`) use **event tables** (`item_
 `audit_events`) or `text`, not enums — this avoids `ALTER TYPE` churn and giant conflicting enums.
 
 **Reuse as-is:** `supply_type`, `fulfilment_method`, `referral_regime`, `referral_status`,
-`reward_kind`, `connect_status`, `merchant_referral_status`, `product_status` (for catalogue).
+`reward_kind`, `connect_status`, `product_status` (for catalogue). The 0010
+`merchant_referral_status` is **superseded** by the richer `merchant_suggestion_status` (add a new
+column; keep the old enum for back-compat, do not drop).
 
 **Extend (additive `ALTER TYPE ADD VALUE`):**
 - `merchant_status`: +`onboarding`, +`suspended`
@@ -351,21 +453,24 @@ core list, item sub-statuses like `refund_pending`) use **event tables** (`item_
 **New enums:**
 | Enum | Values |
 |------|--------|
-| `platform_role` | `operations, finance, support, admin` |
-| `merchant_staff_role` | `owner, manager, picker` |
+| `platform_role` | `super_admin, platform_admin, operations_staff, finance_staff, support_staff` |
+| `merchant_staff_role` | `merchant_admin, merchant_manager, merchant_picker` |
 | `inventory_status` | `in_stock, low_stock, out_of_stock, discontinued` |
 | `order_type` | `single_store, multi_store, platform_only, mixed` |
 | `merchant_order_status` | `pending, accepted, rejected, picking, packed, ready, collected, cancelled` |
 | `item_fulfilment_status` | `pending, confirmed, unavailable, substituted, picking, picked, packed, collected, in_transit, delivered, accepted, rejected, cancelled` |
-| `evidence_type` | `item_pick, packed_order, substitution, unavailable, ready_for_collection, collection_verification, merchant_handover, missing_item, damaged_item, consolidated_load, delivery_proof, customer_accept, customer_reject` |
+| `evidence_type` | `item_pick, packed_order, substitution, unavailable, ready_for_collection, collection_verification, merchant_handover, missing_item, damaged_item, consolidated_load, delivery_proof, customer_accept, customer_reject, return_collection, return_handover, return_confirmation` |
 | `collection_task_status` | `assigned, en_route, arrived, verifying, collected, partial, failed, cancelled` |
 | `delivery_task_status` | `pending, assigned, out_for_delivery, delivered, failed, returned, cancelled` |
 | `customer_confirmation_status` | `pending, confirmed, partially_rejected, rejected, auto_confirmed` |
 | `rejection_reason` | `missing, wrong_item, poor_quality, damaged, expired, incorrect_quantity, unapproved_substitution, temperature, packaging, other` |
 | `rejection_status` | `submitted, under_review, merchant_disputed, approved, declined, resolved` |
 | `refund_status` | `requested, pending_review, approved, processing, completed, declined, failed` |
-| `payout_status` | `pending, eligible, processing, paid, failed, on_hold, reversed` |
+| `return_status` | `return_requested, return_approved, return_assigned, collected_from_customer, returned_to_merchant, return_confirmed, financially_reconciled, return_rejected` |
+| `payout_status` | `pending, eligible, on_hold, recalculating, reconfirmed, processing, paid, failed, reversed` |
 | `transfer_status` | `pending, created, paid, failed, reversed` |
+| `waitlist_status` | `pending, invited, activated, opted_out` |
+| `merchant_suggestion_status` | `suggested, duplicate_check, research_pending, contacted, interested, onboarding, approved, active` |
 | `reward_redemption_status` | `requested, reserved, fulfilled, cancelled, expired` |
 | `support_case_status` | `open, in_progress, awaiting_customer, resolved, closed` |
 | `address_type` | `home, work, other` |
@@ -444,17 +549,35 @@ processing → failed → processing            (retry, same idempotency_key)
 FORBIDDEN: completed→anything; approved→declined after Stripe call issued.
 ```
 
-**Merchant payout / settlement (`payout_status`)**
+**Merchant payout / settlement (`payout_status`) — delivery alone does NOT release funds.**
+Full lifecycle (confirmed): payment received → merchant fulfilment → collection → delivery →
+customer item confirmation → return/rejection/refund review → **settlement recalculation** →
+**payout reconfirmation** → transfer eligible → transfer initiated → paid.
 ```
 pending → eligible → processing → paid
-eligible → on_hold → eligible                (dispute opens/closes)
-processing → failed → processing             (retry)
-paid → reversed                              (post-payout refund clawback — rare, flagged)
-FORBIDDEN: pending→paid (must be eligible: delivered + confirmation window cleared + no open dispute);
-           paid→processing.
+eligible → on_hold → recalculating → reconfirmed → eligible   (any delivery-time return/refund/rejection)
+processing → failed → processing                              (retry, same idempotency key)
+paid → reversed                                               (post-payout clawback — rare, flagged)
+FORBIDDEN: pending→paid; delivered→paid without reconfirmation; eligible→paid while a return/refund
+           is open; paid→processing.
 ```
 **Payout eligibility gate:** `sub_order collected` **AND** order `delivered/completed` **AND**
-confirmation window elapsed **AND** no `item_rejections` open **AND** `connect_account.payouts_enabled`.
+confirmation window elapsed **AND** no `item_rejections`/`item_returns`/`refunds` open **AND**
+settlement recalculated + **reconfirmed** after the last delivery-time decision **AND**
+`connect_account.payouts_enabled`. **Any** return/rejection/refund after `eligible` forces
+`on_hold → recalculating → reconfirmed`.
+
+**Return (`return_status`) — manual ops handling, fully audited.**
+```
+return_requested → return_approved → return_assigned → collected_from_customer
+  → returned_to_merchant → return_confirmed → financially_reconciled
+return_requested → return_rejected                       (not eligible)
+return_approved → return_rejected                        (merchant refuses on inspection → dispute)
+FORBIDDEN: financially_reconciled→anything; skipping collected_from_customer;
+           return_confirmed without merchant confirmation.
+```
+Target: goods `returned_to_merchant` **before end of operating day** (`return_deadline`).
+`financially_reconciled` triggers settlement recalculation + payout reconfirmation.
 
 **Referral (`referral_status`)**
 ```
@@ -531,6 +654,28 @@ Distinct concepts kept in distinct columns (never one "amount"): **Stripe custom
 merchant bank, downstream of transfer) · **commission** · **platform fees** · **customer refund**
 (`refunds.amount_cents`) · **merchant adjustment** (`settlement_adjustments`).
 
+**Fee-refund rules (confirmed).** Product value and refundable fulfilment charges **may** be
+refunded; the **service fee is retained by default** — it does **not** say fees can *never* be
+refunded. Each fee component is stored separately so it can be treated independently:
+| Component | Column | Default on refund |
+|-----------|--------|-------------------|
+| Product value | `market_order_items.line_total_cents` (Σ) → `refunds.product_value_cents` | **Refundable** |
+| Small-order fee (service) | `market_orders.small_order_fee_cents` | **Retained** |
+| Multi-store handling (service) | `multistore_fee_cents` | **Retained** |
+| Priority-window (fulfilment charge) | `priority_fee_cents` | **Refundable if the priority service failed** |
+| Commission | derived | recomputed on accepted goods |
+
+An **authorised admin may override** and refund a retained fee. Every override **requires**:
+authorised actor (`refunds.fee_override_by`, role ≥ `finance_staff`/`platform_admin`), a reason
+(`fee_override_reason`), the amount (`fee_refund_cents`), a timestamp, and an `audit_events` row —
+enforced in the refund RPC (`is_fee_override=true` path). `refunds.amount_cents =
+product_value_cents + fee_refund_cents`.
+
+**Refund scope** (`refunds.scope`): a refund may target a single `item`, `multi_item`, a
+`sub_order`, or the whole `order`. Refund decisions **change item status** (`accepted`→refunded via
+`refunded_cents`, or `rejected`) **and reduce merchant settlement** (accepted subtotal ↓ →
+recompute commission → payout reconfirmation).
+
 **Reward money:** cashback stored/redeemed in **pence** (`reward_ledger.delta` where `kind=cashback`);
 points stored as **whole points** (`kind=points`) with **no fixed cash value**; a points→discount
 redemption is capped by `reward_catalogue.discount_cap_cents`. Cashback→FM-discount conversion is a
@@ -544,8 +689,10 @@ Deny-by-default on every table. Privileged writes go through **RPC (SECURITY DEF
 `search_path`) or server actions with the service-role client after an authz check** — never direct
 browser writes. Cross-merchant isolation is enforced by joining `merchant_staff`.
 
-**Actors:** anonymous · customer (authenticated) · merchant_owner · merchant_manager ·
-merchant_picker · driver · operations · finance · support · admin · service_role.
+**Actors:** anonymous · customer (authenticated) · merchant_admin · merchant_manager ·
+merchant_picker · driver · operations_staff · finance_staff · support_staff · platform_admin ·
+super_admin · service_role. (Merchant roles are scoped by `merchant_staff` assignment; a
+`merchant_admin` sees **only** merchants explicitly assigned to them.)
 
 **Access matrix (R=read, I=insert, U=update, — none; `rpc`=via RPC only):**
 
@@ -616,9 +763,15 @@ Stripe API calls; **webhook** for Stripe truth; **scheduled job** for time-based
 | Driver confirm collection | RPC | driver (assigned) | task arrived/verifying | 1 tx | task_id | task→collected, items→collected, evidence required | ✓ | idempotent |
 | Mark out for delivery | RPC | driver | all collections done | 1 tx | delivery_task_id | order→out_for_delivery | ✓ | idempotent |
 | Confirm delivery (POD) | RPC | driver | task out_for_delivery | 1 tx | task_id | task→delivered, order→delivered, POD evidence, start confirm window | ✓ | idempotent |
-| Customer confirm item | RPC | customer | item delivered | 1 tx | item_id | item→accepted, confirmation row | ✓ | unique per item |
+| Customer confirm (3-level) | RPC | customer | items delivered | 1 tx | order/sub/item id | `order_confirmations` + fan-out `item_confirmations`; accept_all / reject_order / reject_sub_order / reject_items | ✓ | unique per item |
 | Customer reject item | RPC | customer | item delivered, window open | 1 tx | item_id | item→rejected, rejection row, evidence, refund requested | ✓ | unique per item |
-| Approve refund | RPC | ops/finance | rejection under_review | **1 tx** | refund idem key | refund→approved, recompute settlement | ✓ | idempotent |
+| Request item return | RPC | customer/ops | item delivered or pre-driver-departure | 1 tx | item_id | `item_returns` return_requested, evidence, deadline=EOD | ✓ | unique per item-return |
+| Approve/assign return | RPC | ops | return_requested | 1 tx | return_id | return_approved→assigned, operator set | ✓ | idempotent |
+| Confirm return to merchant | RPC | driver/ops | return collected | 1 tx | return_id | returned_to_merchant→return_confirmed, merchant evidence | ✓ | idempotent |
+| Reconcile return (finance) | RPC | finance | return_confirmed | **1 tx** | return_id | financial_adjustment, settlement recalculation | ✓ | idempotent |
+| Approve refund (scoped) | RPC | ops/finance | rejection/return under_review | **1 tx** | refund idem key | refund→approved (item/multi/sub/order), recompute settlement, payout reconfirm | ✓ | idempotent |
+| Fee-refund override | RPC | finance/platform_admin+ | approved override authz | **1 tx** | refund idem key | `is_fee_override`, `fee_refund_cents`, mandatory reason + `audit_events` | ✓ | idempotent |
+| Recalculate + reconfirm payout | RPC/job | finance/system | any return/refund closed | 1 tx | sub_order_id | settlement recompute, payout on_hold→recalculating→reconfirmed→eligible | ✓ | idempotent |
 | Execute Stripe refund | server action | finance (server) | refund approved | — | `idempotency_key` | Stripe refund; webhook confirms | ✓ | Stripe idempotency |
 | Refund webhook | webhook | Stripe | signature | 1 tx | `stripe_event_id` | refund→completed | ✓ | dup-skip |
 | Calculate settlement | RPC/job | finance/system | order completed, window clear | 1 tx | sub_order_id | settlement eligible | ✓ | recomputable pre-transfer |
@@ -663,11 +816,17 @@ before acting, so redelivered webhooks are no-ops. Every money RPC additionally 
 
 - **Types:** `geography(Point,4326)` for merchant/address/launch-area points (exists);
   `geography(Polygon,4326)` for `service_zones` (new). GiST indexes on all.
-- **Discovery (browse):** `ST_DWithin(merchant.location, address.location, 8046.72)` (5 miles) —
-  *and* merchant in an active `discovery` zone. Returns merchants a user may **see**.
-- **Delivery eligibility (order):** address must fall inside an active **`delivery`** zone
-  (`ST_Covers(zone.area, address.location)`) — **a separate, stricter test**. A merchant may be
-  discoverable at 4.9 miles yet undeliverable if the address is outside the delivery polygon.
+- **Nearest hub (at address save):** `ST_Distance(address.location, hub.centroid)` over
+  `launch_areas`; store `nearest_hub_id` + `hub_distance_m`. Never computed at query time.
+- **Discovery (browse):** the customer is anchored to their **nearest live hub**; discovery =
+  `ST_DWithin(address.location, hub.centroid, 8046.72)` (5 miles **from the hub**, not from each
+  merchant) — merchants shown are those served by that hub. A postcode may map to **more than one
+  hub** (overlapping 5-mile areas) → offer the nearest live hub, list others.
+- **Delivery eligibility (order):** address must fall inside an active **`delivery`** zone AND a
+  covered **`route`** for the chosen day — `ST_Covers(zone.area, address.location)`, **a separate,
+  stricter test than discovery**. **A customer inside the 5-mile hub discovery radius may be
+  outside every active delivery route** and therefore unable to order delivery (collection may
+  still be available). Re-checked at basket-price time.
 - **Collection eligibility:** merchant `collection_enabled` + within a `collection` zone; customer
   travels to merchant (no delivery test).
 - **Postcode → point:** geocode via a UK postcode provider (e.g. postcodes.io) at address save;
@@ -717,8 +876,8 @@ Each phase: dependencies · backfill · rollback · verification · security che
 
 | # | Migration | Adds | Depends on | Backfill | Verify | Security check |
 |---|-----------|------|------------|----------|--------|----------------|
-| 0011 | Geography & zones | `service_zones`, `address_type`, `service_area_type`, extend `launch_areas` | 0010/PostGIS | seed Dartford/Erith/Eltham delivery+discovery zones | `ST_DWithin`/`ST_Covers` sample | RLS public-read active zones |
-| 0012 | Roles & membership | `platform_staff`, `merchant_staff`, `drivers`, `platform_role`, `merchant_staff_role` | auth | seed admin from `ADMIN_EMAILS` | role lookups | isolation join works |
+| 0011 | Geography & hubs | `service_zones`, `address_type`, `service_area_type`, extend `launch_areas`(hub fields), extend `user_addresses`(`nearest_hub_id`,`hub_distance_m`,`type`) | 0010/PostGIS | seed Eltham/Dartford/Erith hubs + discovery/delivery/route zones; backfill nearest hub | `ST_DWithin` from hub / `ST_Covers` sample | RLS public-read active zones |
+| 0012 | Roles & membership | `platform_staff`, `merchant_staff`, `drivers`, `platform_role`(super_admin…support_staff), `merchant_staff_role`(merchant_admin/manager/picker) | auth | **seed `super_admin` = abidoyedimeji** (resolve to real user id/email); migrate `ADMIN_EMAILS`→`platform_admin` | role lookups | isolation join works |
 | 0013 | Merchant extensions | extend `merchants` (+enum values), `connect_accounts`, `connect_status` reuse | 0012 | — | merchant read | merchant-staff RLS |
 | 0014 | Catalogue | extend `market_products` (+`inventory_status`,`product_status`), `product_images` | 0013 | default status=active for seeded | product read | merchant write via staff |
 | 0015 | Platform inventory | extend `platform_inventory`, `inventory_movements` | 0014 | seed eggs/water | stock math | ops-only writes |
@@ -729,11 +888,11 @@ Each phase: dependencies · backfill · rollback · verification · security che
 | 0020 | Item fulfilment | extend `market_order_items`, `item_fulfilment_status`, `item_events` | 0019 | — | item transitions | merchant/customer scoping |
 | 0021 | Evidence & media | `evidence_media`, `evidence_type`, buckets | 0019 | — | signed URL | immutable, no update policy |
 | 0022 | Driver logistics | `routes`, `collection_tasks`, `delivery_tasks`, task enums | 0019 | — | task assign | driver-assigned RLS |
-| 0023 | Confirmation | `item_confirmations`, `customer_confirmation_status` | 0020 | — | confirm RPC | owner only |
-| 0024 | Rejections & refunds | `item_rejections`, `refunds`, reason/status enums | 0023 | — | reject→refund | ops-approve only |
+| 0023 | Confirmation (3-level) | `order_confirmations`, `item_confirmations`, `customer_confirmation_status` | 0020 | — | order/sub-order/item confirm RPC | owner only |
+| 0024 | Rejections, returns & refunds | `item_rejections`, `item_returns`, `refunds`(scope+fee-override cols), `rejection_reason`/`rejection_status`/`return_status`/`refund_status` | 0023 | — | reject→return→refund; fee-override audited | ops/finance-approve only |
 | 0025 | Payments idempotency | `market_payment_events` | 0018 | — | dup-skip test | service-role only |
 | 0026 | Settlements | `merchant_settlements`, `settlement_adjustments`, `merchant_transfers`, payout/transfer enums | 0024/0025 | — | accepted-only math | finance-only |
-| 0027 | Referrals & rewards | `referral_codes`, extend `referrals`/`reward_ledger`/`reward_redemptions`, `reward_catalogue`, redemption enum | 0018 | issue codes to existing users | accrual/redeem | owner read; system write |
+| 0027 | Referrals, rewards & acquisition | `referral_codes`, extend `referrals`/`reward_ledger`/`reward_redemptions`, `reward_catalogue`, redemption enum; extend `location_waitlist`(hub,`waitlist_status`), extend `merchant_suggestions`(`merchant_suggestion_status`,url/qr/dup), `merchant_referral_milestones` | 0012/0018 | issue codes to existing users; backfill waitlist hub | accrual/redeem; demand=count(active waitlist) | owner read; system write; insert-only public capture |
 | 0028 | Support & notifications | `support_cases`, `support_messages`, `support_case_status`, `notifications` | 0012 | — | case flow | owner+support RLS |
 | 0029 | Audit | `audit_events` | 0012 | — | append test | no update/delete |
 | 0030 | RPCs | all SECURITY DEFINER RPCs (pinned search_path incl. `extensions` for PostGIS) | 0011–0029 | — | per-RPC tests | grant to correct roles only |
