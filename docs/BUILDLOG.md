@@ -4,6 +4,47 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Platform Wave 1B — Audit & Immutable Events ✅
+**Status:** migrations `0014`–`0015` applied to live Supabase · all gates passed · typecheck + tests + build pass
+
+Upgrades the Wave-1A `audit_events` stub into the **canonical, reusable, append-only audit service**
+(one table, one writer) used by every product/service. Convention: `docs/AUDIT-CONVENTION.md`.
+
+**PR1 — canonical schema + immutability (`0014`):** enums `audit_actor_type` (9 values),
+`product_context` (platform/cookbook/farmers_market), `audit_source_application` (7 values).
+Additive columns on `audit_events`: actor type/role/merchant, parent entity, product_context,
+source_application, reason code/text, before/after_summary, metadata, request/correlation/operation
+ids, `idempotency_key` (+partial unique), `supersedes_event_id`, ip/user_agent, `schema_version`
+(1A rows=1). `occurred_at` deliberately **not** added — `created_at` already serves it.
+**Defence-in-depth immutability:** a BEFORE UPDATE/DELETE/TRUNCATE trigger blocks mutation for
+**every** role incl. service-role, plus revoke of the **`TRUNCATE`/`REFERENCES`/`TRIGGER`** grants the
+0012 hardening had missed on `authenticated` (a real immutability hole — TRUNCATE bypasses RLS).
+
+**PR2 — canonical writer (`0015`):** `record_audit_event(...)` — the single SECURITY DEFINER,
+internal-only (no anon/authenticated grant) append-only writer. Validates domain-oriented action
+names (rejects UI-style), rejects secret-bearing + >16KB payloads, derives `actor_type`/`actor_role`
+from `platform_staff`/`merchant_staff`/`drivers`, **never fabricates a uid** for system actors,
+idempotent via `idempotency_key`. The 1A `_record_audit` is now a thin shim delegating here, so every
+existing identity RPC auto-emits canonical `schema_version=2` events with **no per-RPC edits** — no
+competing audit functions. Audit insert shares the business transaction (can't commit without it).
+
+**PR3 — verification + docs:** `docs/AUDIT-CONVENTION.md` (action naming, actor model, immutability,
+idempotency, payload hygiene); `lib/audit-actions.ts` (pure validator mirroring the DB rule) + tests;
+`supabase/tests/wave1b_verification.sql`.
+
+**Gates (verified on live DB):** UPDATE/DELETE/**TRUNCATE** blocked even for the privileged
+connection; canonical write via shim → `2/platform/database_rpc`; idempotent (same key → 1 row);
+secret + oversize + UI-name + malformed-action all rejected; system actor stored with `null`
+actor_user_id (no fabrication); human type without uid rejected; **attribution proven** — a real
+super_admin invite yields `actor_type=platform_staff, actor_role=super_admin,
+action=platform_staff_invite.created`; the 2 legacy 1A rows remain valid.
+
+**Preflight note:** found + closed the missing `TRUNCATE` grant on `authenticated` (immutability
+hole from Wave 1A). Documented magic-link smoke check: `abidoyedimeji@gmail.com` exists + confirmed +
+`super_admin`; auth callback/middleware intact.
+
+---
+
 ## Platform Wave 1A — Identity & Organisations ✅
 **Status:** migrations `0011`–`0013` applied to live Supabase · all four gates passed · typecheck + 11/11 tests + `next build` pass
 
