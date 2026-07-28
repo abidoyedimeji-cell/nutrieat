@@ -4,6 +4,44 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Platform Wave 1B.1 — Audit Service Closeout ✅
+**Status:** migration `0016` applied to live Supabase · all gates passed · typecheck + tests + build pass
+
+Completes the parts of the Wave-1B brief omitted when it arrived truncated. Preserves `0014`/`0015`.
+
+**🔴 Security fix (preflight finding):** `record_audit_event` / `_record_audit` / `_audit_has_secret`
+were **executable by anon + authenticated** — Supabase's default privileges auto-grant EXECUTE on
+function creation, and the 0015 `revoke … from public` didn't remove the direct role grants. The
+canonical writer was therefore **browser-callable = actor-spoofing hole**. `0016` revokes execute
+from anon + authenticated (+ public) on all internal audit functions. Verified: writer/shim/helpers
+`false/false`; identity RPCs + `get_audit_events` stay `authenticated`-only (gated internally).
+
+**Restricted read (`get_audit_events`):** one SECURITY DEFINER, pinned-search_path, `authenticated`-
+only read RPC — bounded pagination (max page 100), safe projection (no `metadata`/`ip`/`user_agent`),
+per-role category scope, cross-merchant isolation. super/platform_admin = all; operations = ops only;
+finance = finance only; support = support only; merchant_admin = own-merchant `merchant` events only;
+managers/pickers/drivers/customers/anon **denied**. Proven on live DB (ops sees 0 security/finance;
+finance sees 0 security; merchant A sees 0 of B; customer/driver forbidden).
+
+**Classification:** one minimal additive field `event_category` (enum) stamped at **write time** by
+action namespace (`_audit_category_for`) — read scoping filters the stored enum, never action strings.
+Legacy null-category rows stay visible only to platform admins.
+
+**Wave 1A enrichment:** the 9 identity RPCs re-emit canonical events with **before/after summaries +
+`reason_code` + merchant scope**, and an explicit **`system_migration`** actor for bootstrap. Same
+signatures, same authorisation rules. Proven: role change records
+`operations_staff->finance_staff reason=role_change`.
+
+**PR B:** `docs/AUDIT-REQUIREMENTS-MATRIX.md` (all 32 requirements → tests), `docs/AUDIT-RETENTION.md`
+(categories, retention considerations pending legal/accounting sign-off, account-deletion/
+pseudonymisation, prohibited fields, safe summaries), `lib/audit-actions.ts` `auditCategoryFor` mirror
++ tests, `supabase/tests/wave1b1_verification.sql`.
+
+**Notes:** finance/support refund overlap deferred to Wave 1C (no such events exist yet) — flagged in
+the retention doc. No business authorisation rule changed.
+
+---
+
 ## Platform Wave 1B — Audit & Immutable Events ✅
 **Status:** migrations `0014`–`0015` applied to live Supabase · all gates passed · typecheck + tests + build pass
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isValidAuditAction, assertAuditAction, auditAction } from "../lib/audit-actions";
+import { isValidAuditAction, assertAuditAction, auditAction, auditCategoryFor } from "../lib/audit-actions";
 
 describe("audit action naming (mirror of migration 0015 writer validation)", () => {
   it("accepts domain-oriented namespace.action names", () => {
@@ -38,5 +38,27 @@ describe("audit action naming (mirror of migration 0015 writer validation)", () 
   it("auditAction builds and validates", () => {
     expect(auditAction("driver", "activated")).toBe("driver.activated");
     expect(() => auditAction("driver", "Clicked!")).toThrow();
+  });
+});
+
+describe("audit category classification (mirror of migration 0016 _audit_category_for)", () => {
+  it("maps namespaces to categories used by read scoping", () => {
+    expect(auditCategoryFor("platform_staff.role_changed")).toBe("security");
+    expect(auditCategoryFor("platform_staff_invite.created")).toBe("security");
+    expect(auditCategoryFor("merchant_staff.granted")).toBe("merchant");
+    expect(auditCategoryFor("refund.approved")).toBe("finance");
+    expect(auditCategoryFor("settlement.adjusted")).toBe("finance");
+    expect(auditCategoryFor("issue.raised")).toBe("support");
+    expect(auditCategoryFor("return.requested")).toBe("support");
+    // default bucket
+    expect(auditCategoryFor("driver.status_changed")).toBe("operations");
+    expect(auditCategoryFor("order.created")).toBe("operations");
+    expect(auditCategoryFor("item.picked")).toBe("operations");
+  });
+
+  it("keeps security separate from operations/finance/support (read-isolation basis)", () => {
+    const sec = auditCategoryFor("platform_staff.suspended");
+    expect(sec).toBe("security");
+    expect(["operations", "finance", "support", "merchant"]).not.toContain(sec);
   });
 });
