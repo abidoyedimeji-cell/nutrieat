@@ -6,6 +6,8 @@ import {
   assertSameValueSystem,
   commissionSplit,
   FARMERS_MARKET_COMMISSION_BPS,
+  CASH_CREDIT_CLASSIFICATIONS,
+  pointsCountTowardAvailable,
   type Posting,
 } from "../lib/money";
 
@@ -66,5 +68,21 @@ describe("two value systems — cash pence vs non-cash points never mix", () => 
     expect(() => assertSameValueSystem("points", "points")).not.toThrow();
     expect(() => assertSameValueSystem("cash", "points")).toThrow();
     expect(() => assertSameValueSystem("points", "cash")).toThrow();
+  });
+
+  it("cashback is a cash credit classification, separate from points", () => {
+    expect(CASH_CREDIT_CLASSIFICATIONS).toContain("cashback");
+    expect(CASH_CREDIT_CLASSIFICATIONS).toContain("general");
+    expect(CASH_CREDIT_CLASSIFICATIONS).toContain("refund");
+    expect(CASH_CREDIT_CLASSIFICATIONS).toContain("promotional");
+    // points is NOT a cash credit classification — it lives in the non-cash reward_ledger.
+    expect(CASH_CREDIT_CLASSIFICATIONS as readonly string[]).not.toContain("points");
+  });
+
+  it("available points exclude pending points", () => {
+    expect(pointsCountTowardAvailable("available")).toBe(true);
+    expect(pointsCountTowardAvailable("pending")).toBe(false);
+    expect(pointsCountTowardAvailable("expired")).toBe(false);
+    expect(pointsCountTowardAvailable("reversed")).toBe(false);
   });
 });
