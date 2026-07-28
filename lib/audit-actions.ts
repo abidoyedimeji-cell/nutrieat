@@ -34,3 +34,37 @@ export function assertAuditAction(action: string): string {
 export function auditAction(namespace: string, verb: string): string {
   return assertAuditAction(`${namespace}.${verb}`);
 }
+
+export type EventCategory = "security" | "operations" | "finance" | "support" | "merchant";
+
+// Mirror of the DB `_audit_category_for` (migration 0016) — classification by action namespace.
+// The DATABASE is authoritative (it stamps event_category at write time); this keeps the mapping
+// testable + reusable in server code. Read scoping filters the stored enum, never these strings.
+const CATEGORY_BY_NAMESPACE: Record<string, EventCategory> = {
+  platform_staff: "security",
+  platform_staff_invite: "security",
+  role: "security",
+  security: "security",
+  merchant_staff: "merchant",
+  merchant_staff_invite: "merchant",
+  merchant: "merchant",
+  merchant_suggestion: "merchant",
+  refund: "finance",
+  settlement: "finance",
+  transfer: "finance",
+  payout: "finance",
+  commission: "finance",
+  reward: "finance",
+  referral: "finance",
+  support_case: "support",
+  support: "support",
+  issue: "support",
+  return: "support",
+  dispute: "support",
+};
+
+/** Category an action maps to (default "operations" — order/item/collection/delivery/driver/…). */
+export function auditCategoryFor(action: string): EventCategory {
+  const namespace = (action ?? "").toLowerCase().split(".")[0];
+  return CATEGORY_BY_NAMESPACE[namespace] ?? "operations";
+}

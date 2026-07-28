@@ -40,8 +40,12 @@ state changes**, not page views.
 invite → `platform_staff/super_admin/platform_staff_invite.created`); append-only enforced by trigger
 against UPDATE/DELETE/**TRUNCATE** for all roles + revoked grants; one canonical writer
 (`record_audit_event`), idempotent, secret/oversize-rejecting; system actors keep null uid. Convention
-in `AUDIT-CONVENTION.md`; verification in `supabase/tests/wave1b_verification.sql`. **Do not begin
-Wave 1C automatically — awaiting review.**
+in `AUDIT-CONVENTION.md`; verification in `supabase/tests/wave1b_verification.sql`.
+**Wave 1B.1 closeout ✅ (migration 0016):** restricted role-scoped read RPC (`get_audit_events`),
+writer execution-grant hardening (closed an anon/authenticated actor-spoofing hole), `event_category`
+classification, Wave-1A enrichment (before/after + reason + merchant scope + system actor). Matrix in
+`AUDIT-REQUIREMENTS-MATRIX.md`; retention in `AUDIT-RETENTION.md`. **Do not begin Wave 1C automatically
+— awaiting review.**
 
 ### Wave 1C — Money & ledger foundation
 Build **separated** concepts (no vague "balance"): customer payment · platform fee · merchant gross ·

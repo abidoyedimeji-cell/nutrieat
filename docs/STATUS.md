@@ -9,10 +9,13 @@ for the technical design, [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) for con
 > sole reliance on `ADMIN_EMAILS`; super-admin bootstrapped to real `auth.users.id`; cross-merchant
 > isolation proven.
 >
-> **Platform Wave 1B (Audit & Immutable Events) — ✅ COMPLETE** (migrations 0014–0015, applied +
+> **Platform Wave 1B (Audit & Immutable Events) — ✅ COMPLETE** (migrations 0014–0016, applied +
 > gated). Canonical append-only audit service: one writer (`record_audit_event`), defence-in-depth
 > immutability (UPDATE/DELETE/TRUNCATE blocked for all roles), attributable + idempotent, secret/
-> oversize-rejecting. Convention in [`AUDIT-CONVENTION.md`](./AUDIT-CONVENTION.md).
+> oversize-rejecting. **1B.1 closeout** added restricted role-scoped reads (`get_audit_events`),
+> closed a writer actor-spoofing grant hole, `event_category` classification, and Wave-1A audit
+> enrichment. Convention [`AUDIT-CONVENTION.md`](./AUDIT-CONVENTION.md); retention
+> [`AUDIT-RETENTION.md`](./AUDIT-RETENTION.md).
 > Marketplace backbone continues per the wave plan; **Wave 1C (Money & ledger) awaits review**.
 
 ## Overall: ~55% — execution underway
