@@ -49,6 +49,51 @@ C22–C33 and the "Amendment 1" banner in `MARKETPLACE-ARCHITECTURE.md`):
 
 ---
 
+## Amendment 2 (confirmed)
+
+A further set of marketplace decisions is now **CONFIRMED** (Amendment 2, 2026-07-28) and folded into
+the sections below — **decisions, not assumptions** (see `MARKETPLACE-DECISIONS.md` C34–C45 and
+§14 + the "Amendment 2" banner in `MARKETPLACE-ARCHITECTURE.md`). Amendment 2 **supersedes the
+Amendment-1 table names** where they differ — use the new names **verbatim** below:
+
+| Amendment-1 name | Amendment-2 name (use verbatim) |
+|------------------|---------------------------------|
+| `order_confirmations` | `delivery_confirmations` |
+| `item_confirmations` | `delivery_confirmation_items` |
+| `item_rejections` | `item_issues` (now carries the three dimensions) |
+| `support_cases` | `customer_support_cases` |
+| `notifications` | `notification_events` |
+
+- **Driver-present confirmation (C34).** Confirmation happens **with the driver present**; the driver
+  **may not close the delivery** until the customer has reviewed the order. → §14.
+- **Three orthogonal dimensions (C35).** `refund_eligibility`, `return_requirement` and `liability`
+  are recorded **separately and never combined**. → §14A, §15, §16, §17.
+- **Issue reasons (C36).** A 9-value `issue_reason` set + note + customer image + affected qty; every
+  flag **immediately notifies** support + relevant merchant + driver/ops. → §15.
+- **Same-driver same-day returns (C37).** The **same driver** returns delivery-time rejected goods to
+  the relevant merchant before end of the operating day, tracked on a `return_manifests` /
+  `merchant_return_confirmations` chain; **end-of-shift vehicle reconciliation** and a formal
+  **route-closure gate**. → §23, §20.5.
+- **Liability rules (C38).** Merchant settlement reduced on evidenced merchant fault (even if the
+  merchant **refuses** a valid evidenced return); platform bears platform-caused loss with **no**
+  merchant deduction; customer-fault refunds not guaranteed. → §14A, §16.
+- **Support finalises all refunds (C39).** All refunds are finalised by **customer support** — clear
+  cases resolved quickly, disputed cases **2–3 days**. → §16.
+- **Split settlement (C40–C41).** Accepted-payable / merchant-deducted / open-held / platform-payable /
+  cancelled-excluded; **hold only the affected item or sub-order value — never freeze a whole
+  multi-merchant order**; no-issue orders payable **immediately** after final route + vehicle
+  reconciliation. → §17.
+- **Service fee & reimbursement (C42–C43).** Service fee non-refundable by default, override for
+  support/finance/super_admin with actor + reason + amount + timestamp + audit; reimbursement by
+  **original payment / account credit / reward credit** (`refund_method`; `customer_credits`). → §16.
+- **Merchant notifications (C44).** Real-time issue notify (reason, affected qty, customer/driver
+  evidence, expected return, **settlement hold amount**, response deadline) + an **end-of-day
+  consolidated** return/refund list. → §21.
+- **Same-day-return capability (C45).** All physical goods (fruit/meat/eggs/water/etc.) are
+  same-day-return capable, with `not_required` / `disposal_authorised` exceptions preserved. → §23.
+
+---
+
 ## 1. Business roles & responsibilities
 
 Authorization is enforced by **DB-backed roles** across three tables — `platform_staff`,
@@ -66,16 +111,16 @@ verified email at implementation).
 
 | Role | Table / enum value | Core responsibilities |
 |------|--------------------|-----------------------|
-| **Customer** | `customer` (default authenticated user + `profiles`) | Browse within the hub discovery radius, build basket, pay, confirm/reject at **order / sub-order / item** level, request refunds & **returns**, open support cases, refer customers/merchants, join hub waitlists. |
+| **Customer** | `customer` (default authenticated user + `profiles`) | Browse within the hub discovery radius, build basket, pay, review & confirm/reject at **order / sub-order / item** level **with the driver present** at delivery, flag item issues (reason + note + image + affected qty), request refunds & **returns**, open support cases, refer customers/merchants, join hub waitlists. |
 | **Super admin** | `platform_staff.role = super_admin` | Everything; superset override. **Bootstrap identity `abidoyedimeji`** (real user id resolved at implementation). |
 | **Platform admin** | `platform_staff.role = platform_admin` | Platform-wide admin below super_admin; manages zones, staff, and overrides. |
-| **Operations staff** | `platform_staff.role = operations_staff` | Recruits/onboards merchants, defines `service_zones` and `delivery_slots`, plans `routes`, assigns tasks, manages **platform eggs/water inventory** (`platform_inventory`), handles suspensions, quality, and **returns logistics**. |
-| **Finance staff** | `platform_staff.role = finance_staff` | Approves refunds (incl. **authorised fee overrides**), computes/releases `merchant_settlements` + `merchant_transfers`, reconciles Stripe, manages payout holds and **reconfirmation**. |
-| **Support staff** | `platform_staff.role = support_staff` | Owns `support_cases`, mediates rejections/returns/disputes, coordinates re-attempts and goodwill. |
+| **Operations staff** | `platform_staff.role = operations_staff` | Recruits/onboards merchants, defines `service_zones` and `delivery_slots`, plans `routes`, assigns tasks, manages **platform eggs/water inventory** (`platform_inventory`), handles suspensions, quality, **returns logistics**, and the **route-closure + vehicle-reconciliation** gates. |
+| **Finance staff** | `platform_staff.role = finance_staff` | Computes/releases `merchant_settlements` (**split settlement**) + `merchant_transfers`, manages `settlement_holds`, payout **reconfirmation**, and executes approved refunds/`customer_credits`; reconciles Stripe. Refund **finalisation** sits with support (C39); finance executes the money-out. |
+| **Support staff** | `platform_staff.role = support_staff` | Owns `customer_support_cases`; **finalises all refunds** via `refund_decisions` — clear cases quickly, disputed cases in **2–3 days**; sets refund eligibility, `refund_method` and liability calls; may authorise a **service-fee override**; mediates issues/returns/disputes, coordinates re-attempts and goodwill. |
 | **Merchant admin** | `merchant_staff.role = merchant_admin` | Legal signatory / manager of **only the assigned** merchant org(s)/stores; completes Stripe Connect KYC; manages catalogue, pricing, staff invites; sees own settlements/payouts. |
 | **Merchant manager** | `merchant_staff.role = merchant_manager` | Day-to-day catalogue + inventory upkeep, imports, accepting/rejecting orders, marking availability, overseeing picking, for an assigned store. |
 | **Merchant picker** | `merchant_staff.role = merchant_picker` | Physically picks, substitutes, packs orders; uploads pick/pack evidence; hands goods to the driver. No pricing or financial access. |
-| **Driver** | `drivers` (`driver`) | Runs `routes`; collects sub-orders from stores in the 04:00–11:00 window; verifies counts; consolidates loads; delivers; captures proof-of-delivery; reports missing/damaged; performs **return collections** from customers. |
+| **Driver** | `drivers` (`driver`) | Runs `routes`; collects sub-orders from stores in the 04:00–11:00 window; verifies counts; consolidates loads; delivers; captures proof-of-delivery; runs the **driver-present delivery confirmation** and **may not close a delivery until the customer has reviewed it**; records item-issue possession/condition; carries **same-day returns** to merchants on a `return_manifests` chain; completes the **route-closure + end-of-shift vehicle reconciliation**. |
 
 Merchants **never** see another merchant's orders, products, evidence, customers or payouts, and are
 **never** shown a whole `market_order` — a `merchant_admin`/`merchant_manager`/`merchant_picker` reads
@@ -274,8 +319,8 @@ through `merchant_order_status`; items move through `item_fulfilment_status` in 
 If the merchant **cannot** fulfil at all, they **reject** the whole sub-order: `pending` → `rejected`
 (`rejected_at`) — the entire sub-order is refunded (§16/§18). During picking, individual shortfalls
 are handled as **unavailable** or **substitution** on the item (§17/§18), not by rejecting the whole
-sub-order. Post-`ready` quality problems are handled as item rejections at the driver/customer stage,
-never by moving the sub-order backwards (`ready → rejected` is forbidden).
+sub-order. Post-`ready` quality problems are handled as **item issues** at the driver/customer stage
+(§15), never by moving the sub-order backwards (`ready → rejected` is forbidden).
 
 ---
 
@@ -385,159 +430,222 @@ For a **collection** fulfilment method there is **no `delivery_task`** and **no 
 
 ---
 
-## 14. Customer confirmation (three levels — confirmed)
+## 14. Customer confirmation (driver-present — confirmed)
 
-At delivery/collection the customer can act at **three granularities — the whole order, a merchant
-sub-order, or an individual item** — and is **never forced to reject a whole order over one bad
-item** (C29). Bulk actions **fan out to item-level rows**, so the underlying truth is always
-item-level; the **scope** of the action is recorded for audit in `order_confirmations` (`scope`
-`order|sub_order|item`), while the one final per-item decision lives in `item_confirmations`
-(`decision` `accepted`/`rejected`, unique per item).
+**Confirmation happens with the driver present (C34).** The **driver may not close the delivery**
+until the customer has reviewed the order — closure is blocked while the delivery-confirmation is
+`pending`/`in_review`. The customer reviews the **full order, each merchant sub-order, each item,
+the platform eggs + water lines, quantities, substitutions, and the relevant merchant evidence**,
+and can still act at **three granularities** (whole order / merchant sub-order / individual item) —
+**never forced to reject a whole order over one bad item** (C29).
 
-**Available actions (`order_confirmations.action`):**
+The review session is one `delivery_confirmations` row per order (supersedes `order_confirmations`;
+unique per `market_order`, records `driver_present`, `opened_at`/`closed_at`,
+`status delivery_confirmation_status`). Each per-item decision is a `delivery_confirmation_items`
+row (supersedes `item_confirmations`; `decision` `accepted`/`rejected`, `affected_qty`, unique per
+item). Bulk actions still **fan out to item-level rows** so the truth is always item-level.
+
+**Available actions (driver-present):**
 
 | Action | Scope | Effect |
 |--------|-------|--------|
-| `accept_all` | order / sub-order | Accept everything in scope; each item `delivered` → `accepted`. |
-| `reject_order` | order | Reject the whole order; fans out to item rejections (§15). |
-| `reject_sub_order` | sub-order | Reject one merchant's sub-order only; other merchants' items are unaffected. |
-| `reject_items` | item(s) | Reject only the selected items — the default granular case. |
-| `request_return` | item(s) | Ask for selected delivered items to be **returned** to the merchant (§23). |
-| `report_issue` | item(s) | Report **missing / damaged / incorrect** items (feeds `rejection_reason`). |
-| `approve_substitution` / `reject_substitution` | item | Approve or reject a proposed substitute (§18). |
+| **Accept all** | order | Accept everything; each item `delivered` → `accepted`; contributes to merchant payout. |
+| **Accept selected** | item(s) | Accept only the chosen items. |
+| **Reject selected** | item(s) | Reject only the chosen items — the default granular case; opens an **item issue** (§15). |
+| **Reject a merchant sub-order** | sub-order | Reject one merchant's sub-order only; other merchants' items are unaffected. |
+| **Reject the full order** | order | Reject the whole order; fans out to per-item issues. |
 
 | # | Step | Effect |
 |---|------|--------|
-| 1 | Window opens | Confirmation window starts at `delivery_proof` (delivery) or collection handover. |
-| 2 | Accept (order / sub-order / item) | `item_confirmations.decision='accepted'` for every item in scope; items `delivered` → `accepted`; contributes to merchant payout. |
-| 3 | Reject (order / sub-order / item) | Fans out to `item_confirmations.decision='rejected'` per item in scope; opens the rejection path (§15) and, where goods go back, the returns path (§23). |
-| 4 | Report / request return | Records the customer action + evidence; routes to rejection (§15), refund (§16) and/or return (§23). |
-| 5 | Window elapses | **Auto-confirm job** writes `decision='accepted'` with a system actor for any un-actioned item; item → `accepted`. |
+| 1 | Driver arrives, opens review | `delivery_confirmations` opened; `status='pending'` → `in_review`. Delivery **cannot** be closed yet. |
+| 2 | Customer accepts (all / selected) | `delivery_confirmation_items.decision='accepted'` per item in scope; items `delivered` → `accepted`. |
+| 3 | Customer rejects (item / sub-order / order) | `decision='rejected'` per item in scope; each rejection **raises an `item_issue`** (§15) with reason + note + image + affected qty, and — where goods go back — the returns path (§23). |
+| 4 | Review complete → driver closes | `delivery_confirmations` → `accepted` / `partially_rejected` / `rejected` → `closed`; **only now** may the `delivery_task` move to `delivered`. |
+| 5 | No-show / driver-left fallback | If the customer is absent so review cannot happen with the driver, the **auto-confirm fallback** writes `accepted` with a system actor after the defined window (DECISIONS Q1, reframed for the synchronous model). |
 
-When every item is resolved with no open rejection/return, the order moves `delivered` → `completed`
-(`customer_confirmation_status` reaches `confirmed`/`auto_confirmed`; `partially_rejected` if some
-items were rejected). The confirmation window clearing is a **hard gate on merchant payout** (§17) —
-merchants are not paid until the customer has had their chance to accept, reject, or return at any of
-the three levels.
-
----
-
-## 15. Item rejection
-
-A rejection captures a reason, evidence, and a quantity, and is reviewed before any refund.
-
-**Reasons (`rejection_reason`):** `missing`, `wrong_item`, `poor_quality`, `damaged`, `expired`,
-`incorrect_quantity`, `unapproved_substitution`, `temperature`, `packaging`, `other`.
-
-1. Customer rejects an item within the window → `item_rejections` row (`reason`, `note`,
-   `qty_rejected`, `evidence_id`), status `submitted`; the item uploads `customer_reject` evidence;
-   item → `rejected`.
-2. Ops/support review: `submitted` → `under_review`.
-3. The merchant may dispute: `under_review` → `merchant_disputed` (with `merchant_response`), then
-   `approved` or `declined`.
-4. Straightforward cases: `under_review` → `approved` (refund follows) or `declined` → `resolved`.
-5. Approved rejections resolve after the refund is issued: `approved` → `resolved`.
-
-Rejection evidence and the item's evidence chain are `locked_at` once a rejection opens, preserving
-the full history for audit. An approved rejection reduces the merchant's `accepted_subtotal_cents`
-and therefore the payout (§17), and **triggers payout reconfirmation** (§17). A rejection is not the
-same as a **return**: where the physical goods must go back to the merchant, an approved rejection (or
-a customer `request_return` action, §14) opens a separate, fully-audited **return** (§23).
+When every item is resolved with no open issue/return, the order moves `delivered` → `completed`.
+The delivery-confirmation closing (accept/reject at any of the three levels) is a **hard gate on
+merchant payout** (§17) — merchants are not paid until the customer has reviewed the order at the
+doorstep.
 
 ---
 
-## 16. Refunds
+## 14A. Three orthogonal dimensions & liability (confirmed)
 
-Refunds are an idempotent money-out ledger (`refunds`, `refund_status`). Each refund carries a unique
-`idempotency_key` and (once issued) a unique `stripe_refund_id`.
+Every flagged item records **three independent facts (C35) — never combined into one status.** Each
+is its own column/enum on `item_issues`, recorded and progressed **separately**:
 
-| # | Step | `refund_status` |
-|---|------|-----------------|
-| 1 | Refund needed (approved rejection, unavailable item, failed/partial collection) | `requested` |
-| 2 | Finance/ops review | `requested` → `pending_review` |
-| 3 | Decision to pay | `pending_review` → `approved` (or `declined`) |
-| 4 | Stripe refund issued | `approved` → `processing` |
-| 5 | Stripe webhook confirms | `processing` → `completed` (a Stripe failure loops `processing` → `failed` → `processing`, same key) |
+| Dimension | Enum | Values |
+|-----------|------|--------|
+| **Refund eligibility** | `refund_eligibility` | `pending_review` · `full_refund` · `partial_refund` · `no_refund` |
+| **Physical return requirement** | `return_requirement` | `required` · `not_required` · `in_driver_possession` · `returned_to_merchant` · `merchant_refused` · `disposal_authorised` |
+| **Liability** | `liability` | `merchant` · `platform_operations` · `customer` · `shared` · `undetermined` |
+
+Keeping them separate is what lets settlement, returns and refunds run on **independent clocks**: a
+merchant may be liable while no physical return is required; a return may complete while refund is
+still `pending_review`; liability may be `platform_operations` with `full_refund` and **no** merchant
+deduction.
+
+**Liability → settlement rules (C38):**
+
+- **`merchant`** — merchant settlement is **reduced by the item value** where evidence supports poor
+  quality, lack of freshness, wrong item, wrong brand, incorrect quantity, **damage before
+  collection**, unapproved substitution, or mismatch vs the merchant's pick/pack evidence. **If the
+  merchant refuses the physical return but the customer claim is valid against evidence, the
+  deduction still applies** (`return_requirement=merchant_refused` + `liability=merchant`).
+- **`platform_operations`** — the **platform bears the refund cost** (post-collection / consolidation /
+  transit damage, driver loss, incorrect delivery, platform handling failure). Where the merchant
+  fulfilled correctly, **merchant payout is NOT reduced** (the item is `platform_payable`, §17).
+- **`customer`** — wrong product ordered, changed mind, item matches listing + evidence, no fault:
+  **refund is not guaranteed; customer support decides** (§16).
+- **`shared` / `undetermined`** — held for support review; split or resolved case-by-case.
+
+---
+
+## 15. Item issues (confirmed)
+
+Every flagged item — whether rejected at the doorstep or reported afterwards — opens an `item_issue`
+(supersedes `item_rejections`). It is the **spine** that carries the three dimensions (§14A) and
+routes to refund (§16), return (§23) and settlement (§17). Each issue captures a **reason, a free-text
+note, a customer image, and the affected quantity**.
+
+**Reasons (`issue_reason`, C36):** `damaged`, `wrong_brand`, `wrong_item`, `not_fresh`,
+`incorrect_quantity`, `missing`, `unapproved_substitution`, `packaging_issue`, `other`.
+*(This 9-value set supersedes the Amendment-1 `rejection_reason`; the old enum is kept only for
+back-compat and no longer written.)*
+
+**Immediate notification (C36).** The moment an issue is raised it **immediately notifies customer
+support + the relevant merchant + the driver/operations** (`notification_events`, §21) — before any
+review. Merchant and support notification is mandatory (the `item_issue_status` machine forbids
+skipping `notified`).
+
+| # | Stage | `item_issue_status` | What happens |
+|---|-------|---------------------|--------------|
+| 1 | Customer flags the item | `raised` | `item_issues` row (`reason`, `note`, `affected_qty`, three dimensions default `pending_review`/`required`/`undetermined`); customer image + driver condition evidence attach via `issue_evidence`. |
+| 2 | Notify | `notified` | Support + relevant merchant + driver/ops notified in real time (reason, qty, evidence, expected return, **settlement hold amount**, response deadline). |
+| 3 | Review | `under_review` | Support/ops set `refund_eligibility`, `return_requirement` and `liability` **independently** (§14A); the affected value is placed on a `settlement_hold` (§17). |
+| 4 | Resolve / dismiss | `resolved` / `dismissed` | `resolved` on a support `refund_decision` (§16); `dismissed` where it is customer-responsibility / no fault. |
+
+Issue evidence lives in `issue_evidence` (customer image / driver condition / merchant response),
+each backed by the immutable `evidence_media` object and `locked_at` on dispute. An issue resolved
+**against the merchant** reduces the merchant's earned gross and **triggers payout reconfirmation**
+(§17); where physical goods must go back, the issue opens a **return** (§23). An issue is **not** the
+same as a return — refund, return and liability progress on separate clocks (§14A).
+
+---
+
+## 16. Refunds (support-finalised — confirmed)
+
+**All refunds are finalised by customer support (C39).** Support owns the ruling in a
+`refund_decisions` row (who decided, the `refund_eligibility`, the `refund_method`, product value,
+any fee treatment, and the `liability` call); `refunds` is then the **idempotent money-out
+execution** of that decision (unique `idempotency_key`, unique `stripe_refund_id` once issued).
+
+**Finalisation flow:**
+
+| # | Stage | State | What happens |
+|---|-------|-------|--------------|
+| 1 | Customer flags the item | issue `raised` (§15) | Reason + note + image + affected qty recorded. |
+| 2 | Driver records possession/condition | `issue_evidence` (driver_condition) | Driver notes whether goods are in their possession, and their condition. |
+| 3 | Support case created | `customer_support_cases` `open` | Issue linked to a support case; affected settlement value placed on a `settlement_hold` (§17). |
+| 4 | Merchant notified | — | Merchant sees reason, qty, evidence, expected return, **hold amount**, response deadline (§21). |
+| 5 | Support reviews & decides | `refund_review_status` `pending_review` → `clear_resolved`/`in_dispute` → `approved`/`declined` → `finalised` | Support finalises eligibility + method; **clear cases resolved quickly, disputed cases 2–3 days** (SLA §21). |
+| 6 | Money out executed | `refund_status` `approved` → `processing` → `completed` | Card refund via Stripe, **or** a `customer_credits` reimbursement (below). Stripe failure loops `processing` → `failed` → `processing`, same key. |
+
+**Hold only the affected value (C40).** A dispute holds **only the affected item value or that
+merchant's sub-order value** — it **does NOT freeze an entire multi-merchant order** for one disputed
+item. Other merchants' undisputed sub-orders remain payable (§17).
 
 **Refund scope & type.** Each refund records a `scope` (`item` / `multi_item` / `sub_order` /
 `order`) and a `refund_type` (`full` / `partial`) — a customer is never forced to refund a whole
-order to fix one item. A refund **changes item status** (`accepted` → refunded via `refunded_cents`,
-or `rejected`) **and reduces merchant settlement**, so it always **triggers payout reconfirmation**
-(§17).
+order to fix one item. A refund **changes item status** and, where the merchant is liable, **reduces
+merchant settlement**, triggering payout reconfirmation (§17). Where liability is
+`platform_operations`, the customer is refunded but **merchant payout is not reduced** (§14A, §17).
 
-**Fee-refund rules (confirmed, C31–C32).** Fees are **not** "never refundable", but the default is to
-**retain the service fee**. Each fee component is stored **separately** so it can be treated on its
-own:
+**Reimbursement methods (C43).** The `refund_method` distinguishes three routes:
+
+| `refund_method` | Where | Notes |
+|-----------------|-------|-------|
+| `original_payment` | `refunds` → Stripe | Refund to the original card/PaymentIntent. |
+| `account_credit` | `customer_credits` (`kind=account_credit`, `amount_cents`) | Store credit, not a card refund. |
+| `reward_credit` | `customer_credits` (`kind=reward_credit`, `points`, `reward_ledger_id`) | Farmers Market reward points. |
+
+**Fee-refund rules (C32/C42).** The **service fee is retained by default**; a refund generally
+returns the eligible **product value** while retaining the service fee. Each fee component is stored
+**separately** so it can be treated on its own:
 
 | Component | Column | Default on refund |
 |-----------|--------|-------------------|
-| Product value | `market_order_items.line_total_cents` (Σ) → `refunds.product_value_cents` | **Refundable** |
+| Product value | `market_order_items.line_total_cents` (Σ) → `product_value_cents` | **Refundable** |
 | Small-order fee (service) | `market_orders.small_order_fee_cents` | **Retained** by default |
 | Multi-store handling (service) | `multistore_fee_cents` | **Retained** by default |
 | Priority-window (fulfilment charge) | `priority_fee_cents` | **Refundable if the priority service failed** |
 | Commission | derived | recomputed on accepted goods |
 
-**Admin fee override.** An **authorised admin** (`finance_staff`/`platform_admin` or above) may
-override and refund a retained fee. Every override **requires** an authorised actor
-(`refunds.fee_override_by`), a reason (`fee_override_reason`), the amount (`fee_refund_cents`), a
-timestamp, and an `audit_events` row — enforced on the `is_fee_override=true` path. The refund total
-is `refunds.amount_cents = product_value_cents + fee_refund_cents`.
+**Service-fee override.** **support / finance / super_admin** may override and refund a retained
+service fee. Every override **requires** an authorised actor, a reason
+(`refund_decisions.fee_override_reason`), the amount (`fee_refund_cents`), a timestamp, and an
+`audit_events` row — enforced on the `is_fee_override=true` path.
 
-**Automated vs manual.** Small, clear-cut refunds (merchant marked an item `unavailable`; a
-`missing_item` confirmed at handover) can be auto-approved to `approved` and processed. Contested or
-higher-value cases (quality/temperature disputes, whole sub-order, any fee override) go through manual
-`pending_review`. **Accepted-items-only payout consequence:** because the merchant is paid on accepted
-items only, a refunded item contributes **£0** to that merchant's payout — the refund reduces
-`accepted_subtotal_cents` and is mirrored as a `settlement_adjustments` line against the settlement.
+**Accepted-items-only payout consequence:** a refunded, merchant-liable item contributes **£0** to
+that merchant's payout — the hold is `applied` as a `settlement_adjustments` line and the payout is
+reconfirmed (§17).
 
-**Response targets:** see the SLA table (§21) — automated refunds are near-immediate on approval;
-manual refund decisions target a same-day/next-business-day response.
+**Response targets:** see the SLA table (§21) — support resolves **clear cases quickly** and
+**disputed cases in 2–3 days**.
 
 ---
 
-## 17. Merchant settlement & payout
+## 17. Merchant settlement & payout (split settlement — confirmed)
 
-Merchants are paid on **accepted items only**, via Stripe Connect transfers, after the order clears
-its confirmation window. **Delivery alone does NOT release funds** (C33). The confirmed payout
-lifecycle runs: payment received → merchant fulfilment → collection → delivery → **customer item
-confirmation** → return/rejection/refund review → **settlement recalculation** → **payout
-reconfirmation** → transfer eligible → transfer initiated → paid. Settlement is based **only on the
-accepted item quantities/values**; rejected / returned / missing / cancelled / refunded items reduce
-the eligible amount.
+Merchants are paid on **accepted items only**, via Stripe Connect transfers. **Delivery alone does
+NOT release funds** (C33). Two things now gate the money: the **driver-present confirmation** must be
+closed (§14), and — for the whole route — the **route + vehicle reconciliation** must be done (§20.5).
 
-**Computation (`merchant_settlements`, one per sub-order):**
+**Split settlement (C40).** Settlement is computed **per merchant sub-order**, splitting each item by
+liability + dispute state (new columns on `merchant_settlements`):
 
 ```
-gross_accepted_cents = Σ accepted items × accepted_qty      (rejected/missing/unavailable = £0)
-commission_rate      = collection ? 0.080 : 0.120           (snapshot on the sub-order)
-commission_cents     = round(gross_accepted_cents × rate)   (once per sub-order, not per item)
-eligible_cents       = gross_accepted_cents − commission_cents − Σ settlement_adjustments
+undisputed_payable = Σ accepted items with no open issue                (payable now)
+held               = Σ items with an OPEN issue (dispute unresolved)    (settlement_holds, held)
+deducted           = Σ items where liability=merchant, resolved against (applied hold → adjustment)
+platform_payable   = Σ items where liability=platform_operations        (merchant still paid; platform bears refund)
+excluded           = Σ cancelled / missing items                        (never in merchant gross)
+
+accepted_gross     = undisputed_payable + platform_payable              (merchant-earned)
+commission_rate    = collection ? 0.080 : 0.120                         (snapshot on the sub-order)
+commission_cents   = round(accepted_gross × rate)                       (once per sub-order, not per item)
+eligible_cents     = accepted_gross − commission_cents − Σ applied deductions
 ```
+
+**Hold only the affected value (C40).** Open issues place a `settlement_hold` on **only the affected
+item/sub-order value** — a disputed item **never freezes a whole multi-merchant order**; other
+merchants' undisputed sub-orders stay payable. On resolution the hold is `released` (becomes payable)
+or `applied` (becomes a `settlement_adjustments` deduction).
 
 Platform fees (small-order £1.99, priority £2.99, multi-store £2.99) are **platform revenue** and
 never part of merchant gross.
 
-**Eligibility gate (`payout_status`: `pending` → `eligible`).** A settlement becomes `eligible` only
-when **all** hold:
+**No-issue path (C41).** With no open issues on the order, the settlement becomes `eligible`
+**immediately after the final route delivery + all merchant returns + route reconciled + van
+confirmed empty + no unresolved issues** — a no-issue transfer **may be initiated straight away**
+after the final route reconciliation. (N6: this is per-route timing across the route's orders.)
 
-1. Sub-order `collected`, and order `delivered`/`completed`.
-2. Confirmation window has elapsed (§14).
-3. No open `item_rejections`, `item_returns`, or `refunds` on the sub-order.
-4. Settlement recalculated **and reconfirmed** after the last delivery-time decision.
-5. `connect_accounts.payouts_enabled = true`.
+**Issue path.** An open issue holds the affected value, notifies the merchant, awaits return
+confirmation where applicable, then on resolution recalculates settlement and **reconfirms** payout:
+`payout_status` `eligible` → `on_hold` → `recalculating` → `reconfirmed` → `eligible`. The merchant is
+never paid on funds a return or refund has since removed; a merchant-refused but evidenced-valid claim
+**still deducts** (§14A). `payout_status` may not `release funds` while any `settlement_hold` is
+`held`, or before route + vehicle reconciliation are done.
 
-**Payout reconfirmation (confirmed, C33).** **Any** delivery-time return, rejection, or refund
-decision forces a reconfirmation loop before funds can move: `eligible` → `on_hold` → `recalculating`
-→ `reconfirmed` → `eligible`. Settlement is recomputed on the new **accepted** subtotal (the refund/
-return is mirrored as a `settlement_adjustments` line), and payout is **reconfirmed** — the merchant
-is never paid on funds that a return or refund has since removed. Once (re)confirmed eligible, finance
-releases **one `merchant_transfers` per merchant** (unique `idempotency_key`, Stripe transfer),
-`payout_status` `eligible` → `processing` → `paid` on the `transfer.paid` webhook. A post-payout
-refund clawback is a rare, flagged `reversed`.
+Once (re)confirmed eligible, finance releases **one `merchant_transfers` per merchant** (unique
+`idempotency_key`, Stripe transfer), `transfer_status` `pending` → `created` → `paid` on the
+`transfer.paid` webhook. A post-payout refund clawback is a rare, flagged `reversed`.
 
 Distinct money concepts stay in distinct columns: customer payment (`market_orders.total_cents`),
-commission, platform fees, merchant transfer (`merchant_transfers.amount_cents`), customer refund
-(`refunds.amount_cents`), settlement adjustment.
+commission, platform fees, split-settlement components (`undisputed_payable_cents`, `held_cents`,
+`deducted_cents`, `platform_liability_payable_cents`), merchant transfer, customer refund
+(`refunds.amount_cents` / `customer_credits`), settlement adjustment.
 
 ---
 
@@ -566,8 +674,8 @@ released (`inventory_movements` `release`). At order time, `available_count=0` s
 
 ## 19. Support
 
-Customer and merchant issues run through `support_cases` (+ `support_messages`), owned by support
-staff.
+Customer and merchant issues run through `customer_support_cases` (+ `support_messages`), owned by
+support staff — who also **finalise all refunds** via `refund_decisions` (§16, C39).
 
 | Stage | `support_case_status` | What happens |
 |-------|-----------------------|--------------|
@@ -577,7 +685,7 @@ staff.
 | 4 | `resolved` | Outcome reached (refund issued, re-attempt booked, goodwill). `resolved_at` set. |
 | 5 | `closed` | Case closed after resolution confirmed. |
 
-Support can read a customer's own orders and a merchant's own sub-orders, and mediates rejection
+Support can read a customer's own orders and a merchant's own sub-orders, and mediates item-issue
 disputes and driver-issue follow-ups. Opening a case on a context locks its evidence (§8).
 
 ---
@@ -587,7 +695,7 @@ disputes and driver-issue follow-ups. Opening a case on a context locks its evid
 ### 20.1 Merchant quality scoring
 
 `merchants.quality_score` (`numeric(4,2)`) is computed from operational signals over a rolling
-window: rejection rate (approved `item_rejections` ÷ items), missing-item rate (`missing_item`
+window: issue rate (merchant-liable `item_issues` ÷ items), missing-item rate (`missing_item`
 evidence at handover), and on-time readiness (sub-order `ready` before the driver's pickup slot).
 
 | Band | Guidance | Action |
@@ -618,7 +726,7 @@ account restricted (`payouts_enabled=false`), or agreement breach.
 | **Breakdown mid-route** | Ops reassigns remaining `collection_tasks`/`delivery_tasks` to another driver/route; tasks stay `assigned` and re-sequence. |
 | **Route over capacity** | Ops splits the route or moves tasks to a second `routes` for the window; delivery slots respect `delivery_slots.capacity`. |
 | **Store closed / no goods** | Collection task `arrived` → `failed`; affected items refunded; ops decides re-collect (new task) or refund the sub-order. |
-| **Return-to-base / return-to-merchant** | Undeliverable goods return with the driver; perishables handled per cold-chain terms; ops books a refund or re-attempt. A **customer-initiated return** of delivered goods is a distinct, fully-audited workflow (§23), targeting the merchant before end of operating day. |
+| **Return-to-base / return-to-merchant** | Undeliverable goods return with the driver; perishables handled per cold-chain terms; ops books a refund or re-attempt. A **customer-initiated return** of delivered goods is a distinct, fully-audited **same-driver same-day** workflow (§23), carried on the driver's `return_manifests` back to the merchant before end of operating day. |
 
 ### 20.4 Failed delivery
 
@@ -629,14 +737,42 @@ If the customer is unavailable or refuses at the door: `delivery_task_status`
   to refund/support. `delivered → failed` and `returned → delivered` are forbidden — a return is
   terminal for that task.
 
+### 20.5 Route closure & vehicle reconciliation (confirmed)
+
+A driver's route is not "done" when the last drop is made — it closes only through a formal gate, and
+**no-issue merchant transfers may initiate only after this reconciliation** (§17, C41).
+
+**Route-closure gate (`route_reconciliations`, `route_status`).** A route may reach `closed`
+**only** when **all** hold:
+
+1. **All deliveries completed** (`all_deliveries_done`).
+2. **All returns completed or formally exceptioned** (`all_returns_done_or_exceptioned`) — no
+   `return_manifest_item` left `pending`/`in_possession` without an exception.
+3. **Return evidence uploaded** (`return_evidence_uploaded`).
+4. **Merchant return confirmation recorded** (`merchant_confirmations_recorded`,
+   `merchant_return_confirmations`).
+5. **Van confirmed empty and ready** — `vehicle_reconciliations.status = van_empty_confirmed`.
+
+`route_status` walks `planned → active → deliveries_complete → returns_pending → reconciling → closed`
+(a discrepancy or incomplete return diverts to `exception`, resolved back to `reconciling`). Route
+closure **blocks payout release** for the route's orders until it completes.
+
+**End-of-shift vehicle reconciliation (`vehicle_reconciliations`).** At the end of the shift the
+driver runs an explicit **van check**: confirm the van is empty and ready (`van_empty_confirmed`), or
+raise a **discrepancy** (`discrepancy_note`, `unaccounted_item_ref`) for any unaccounted item. The
+status machine walks `pending → in_progress → van_empty_confirmed → closed`; a `discrepancy` opens an
+**ops case** and the **route cannot close while the discrepancy is open**. This catches goods that
+were neither delivered nor properly returned before any funds move.
+
 ---
 
 ## 21. Notifications & service levels
 
 ### 21.1 Notifications
 
-Notifications are stored in `notifications` (`type` is free `text` from a code registry, not an
-enum) and emailed via the existing `lib/email.ts` + **Resend** integration.
+Notifications are an append-only stream in `notification_events` (supersedes `notifications`; `type`
+is free `text` from a code registry, not an enum; `audience` = customer/merchant/driver/ops/finance/
+support) and are emailed via the existing `lib/email.ts` + **Resend** integration.
 
 | Event | Notifies | Channel |
 |-------|----------|---------|
@@ -646,15 +782,21 @@ enum) and emailed via the existing `lib/email.ts` + **Resend** integration.
 | Order ready for collection | Customer | email + in_app |
 | Out for delivery / delivered (POD) | Customer | email + in_app |
 | Collection/delivery failed | Customer, ops | email + in_app |
-| Confirmation window closing | Customer | email |
+| **Item issue raised (real-time)** | **Support + relevant merchant + driver/ops — carries reason, affected qty, customer evidence (where authorised), driver evidence, expected return, settlement hold amount, response deadline (C44)** | email + push + in_app |
+| **End-of-day consolidated return + refund list** | **Each merchant (its own returns/refunds only)** | email + in_app |
+| Confirmation window / driver-present review | Customer | email |
 | Refund approved / completed | Customer | email + in_app |
 | Return approved / collected / confirmed | Customer, ops, target merchant | email + in_app |
 | Settlement eligible / **reconfirmed** / transfer paid | Merchant admin, finance | email + in_app |
-| Task assigned / route ready | Driver | in_app (+ email) |
+| Task assigned / route ready / **route + vehicle reconciliation** | Driver, ops | in_app (+ email) |
 | Support case update | Customer or merchant | email + in_app |
 | Merchant suspended / reinstated | Merchant admin, ops | email |
 | Waitlist invited / activated | Customer | email + in_app |
 | Merchant-suggestion milestone reward | Referring customer | email + in_app |
+
+While the driver completes the route, the merchant receives **real-time** notification of rejected
+items; at end of day each merchant sees a **consolidated return + refund list** for its own goods
+only (C44).
 
 ### 21.2 Service-level expectations (SLA)
 
@@ -667,11 +809,12 @@ operational goals, not contractual guarantees.
 | Merchant picks & marks `ready` | Before the assigned driver pickup slot, within the **04:00–11:00** window. |
 | Driver collection window | All collections completed **04:00–11:00**. |
 | Delivery window | Standard: on the scheduled day (booked **≥2 days** ahead). Priority: within the chosen 3-hour window (9–12 / 12–3 / 3–6). |
-| Confirmation window | Customer has a defined window after delivery/collection to accept/reject/return at order, sub-order, or item level before auto-confirm (exact length locked in DECISIONS). |
-| Refund response | Automated refunds near-immediate on approval; manual decisions **same-day / next business day**. |
-| **Return to merchant** | Approved returns collected from the customer and **returned to the relevant merchant before end of the operating day** (`return_deadline`), then merchant-confirmed and financially reconciled. |
+| Delivery confirmation | **Driver-present** at the doorstep — the driver may not close the delivery until the customer has reviewed the order (§14); no-show/driver-left falls back to auto-confirm after the defined window (DECISIONS Q1). |
+| Refund finalisation (support) | **All refunds finalised by customer support** (§16): **clear cases resolved quickly** (same operating day); **disputed cases in 2–3 days**. |
+| **Return to merchant** | **Same-driver same-day** — returned to the relevant merchant **before end of the operating day** (`return_deadline`), then merchant-confirmed and financially reconciled. |
+| **Vehicle reconciliation** | **At end of each driver shift** — van confirmed empty and ready (`van_empty_confirmed`) before route close and before any payout release; discrepancies open an ops case (§20.5). |
 | Support first response | **1 business day**; delivery-day issues handled within hours during the operating window. |
-| Merchant payout | Released after the confirmation window clears **and after any delivery-time return/refund has been reconciled and the payout reconfirmed** (§17) — target within a few days of `completed`. |
+| Merchant payout | No-issue orders payable **immediately after final route + vehicle reconciliation** (§17, §20.5); issue orders released only after the return/refund is reconciled and payout **reconfirmed** — target within a few days of `completed`. |
 
 ---
 
@@ -745,34 +888,40 @@ through different referrers.
 
 ---
 
-## 23. Returns (confirmed)
+## 23. Returns (same-driver same-day — confirmed)
 
-Returns are handled **manually by the platform team**, but **every return is fully represented and
-audited** (C30). A return is distinct from a rejection (§15): it is a **physical good going back to
-the merchant**. Each return is an `item_returns` row and walks `return_status`:
+A return is distinct from an issue (§15): it is a **physical good going back to the merchant**. In the
+confirmed model the **same driver** who delivered normally returns delivery-time rejected goods to the
+relevant merchant **before end of the operating day** (C37) — the goods stay in the driver's
+possession and ride back on the route, tracked on a per-route **`return_manifests`** with
+**`return_manifest_items`** lines. Each physical return is an `item_returns` row (linked to its
+`item_issue`), and every step is fully audited.
 
-```
-return_requested → return_approved → return_assigned → collected_from_customer
-  → returned_to_merchant → return_confirmed → financially_reconciled
-return_requested → return_rejected        (not eligible)
-```
+**All physical goods are same-day-return capable (C45)** — fruit, damaged products, damaged eggs,
+meat, water, merchant and platform goods alike — while the `not_required` and `disposal_authorised`
+exceptions of `return_requirement` (§14A) are **preserved** (some goods should not travel back, and
+support may authorise disposal instead).
 
-| # | Stage | `return_status` | What happens |
-|---|-------|-----------------|--------------|
-| 1 | Customer requests return | `return_requested` | From a `request_return` action (§14) or an approved rejection (§15); records the order item, quantity, reason, and customer evidence. |
-| 2 | Ops reviews | `return_approved` / `return_rejected` | Ops approves (sets the **`return_deadline` = end of the operating day**) or rejects as ineligible. |
-| 3 | Assign operator | `return_assigned` | Ops assigns an operator/driver (`assigned_operator_id`) to collect from the customer. |
-| 4 | Collect from customer | `collected_from_customer` | Driver collects the goods (`collection_time`), captures evidence. |
-| 5 | Return to merchant | `returned_to_merchant` | Goods delivered back to the **target merchant** (`target_merchant_id`) — **normally before end of operating day**. |
-| 6 | Merchant confirms | `return_confirmed` | Merchant confirms receipt (`merchant_confirmed_at`, merchant evidence). |
-| 7 | Reconcile | `financially_reconciled` | Finance applies the `financial_adjustment_cents`, triggering settlement recalculation + **payout reconfirmation** (§17). |
+**Same-driver flow:**
 
-Each `item_returns` row stores the **order item, quantity, reason, customer evidence, assigned
-operator/driver, collection time, target merchant, return deadline, return confirmation, merchant
-confirmation, financial adjustment, and admin notes**. The target is always to get goods
-**`returned_to_merchant` before end of the operating day** (SLA §21.2). `financially_reconciled` is
+| # | Stage | State | What happens |
+|---|-------|-------|--------------|
+| 1 | Customer flags the item | issue `raised` (§15) | Reason + note + image + affected qty; `return_requirement=required` by default. |
+| 2 | Driver confirms possession | `return_requirement=in_driver_possession` | Driver takes the goods; the item is added to the route **`return_manifest`** (`return_manifest_items`, `in_possession`). |
+| 3 | Merchant notified | — | Relevant merchant told a return is inbound (expected return, hold amount, deadline — §21). |
+| 4 | Driver completes the route | route `deliveries_complete` → `returns_pending` | Remaining drops finished; returns still to be dropped back. |
+| 5 | Driver returns the item | `returned_to_merchant` | Goods delivered back to the **`target_merchant_id`**, `return_manifest_item` → `returned`. |
+| 6 | Merchant confirms receipt | `return_confirmed` | `merchant_return_confirmations` (`outcome=received`, merchant evidence). If the merchant **refuses** (`outcome=refused` / `return_requirement=merchant_refused`), a valid evidenced claim **still deducts** (§14A). |
+| 7 | Financial reconciliation | `financially_reconciled` | Finance applies `financial_adjustment_cents`, triggering settlement recalculation + **payout reconfirmation** (§17). |
+
+`return_status` walks
+`return_requested → return_approved → return_assigned → collected_from_customer → returned_to_merchant
+→ return_confirmed → financially_reconciled` (with `return_rejected` for ineligible, and a
+`disposal_authorised` short-path to `financially_reconciled` when no physical return is required).
+`return_confirmed` requires a `merchant_return_confirmations` row; `financially_reconciled` is
 terminal and feeds the payout reconfirmation loop (§17) — a merchant is never paid for goods that came
-back.
+back, and the driver's route **cannot close** until all returns are completed or exceptioned and
+merchant confirmations recorded (§20.5).
 
 ---
 
