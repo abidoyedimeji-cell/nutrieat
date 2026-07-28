@@ -934,3 +934,461 @@ locked rules: £40 minimum, £1.99 small-order fee below £60, 8% collection / 1
 commission, £2.99 priority, £2.99 multi-store, no mixed-order fee, and merchant paid on accepted
 items only. Operations narrative → `MARKETPLACE-OPERATIONS.md`; open decisions →
 `MARKETPLACE-DECISIONS.md`.*
+
+---
+
+## Amendment 1 scenarios (51–74)
+
+These 24 scenarios exercise the **confirmed** Amendment 1 vocabulary: town-centre hubs (Eltham /
+Dartford / Erith) and hub-based discovery separated from delivery eligibility (Context 22, C22–C24);
+the 10-role DB model with super-admin bootstrap `abidoyedimeji` (Context 1, C28); three-level
+delivery confirmation via `order_confirmations`/`item_confirmations` (Context 12, C29); the fully
+audited **returns** lifecycle `item_returns`/`return_status` (Context 13, C30); scoped refunds with
+the **service-fee-retained-by-default** rule and audited fee override (Context 13/§5, C31–C32); and
+the **payout reconfirmation** loop `eligible→on_hold→recalculating→reconfirmed→eligible` (§4.2, C33).
+Merchant is paid on **accepted items only** and payout **reconfirms after any return/refund**. Fee
+mapping follows note N1: small-order + multi-store fees = retained service/handling; priority-window
+= refundable if the priority service failed. All money in **integer pence**.
+
+- **New enums used:** `customer_confirmation_status`: `pending, confirmed, partially_rejected,
+  rejected, auto_confirmed`; `return_status`: `return_requested, return_approved, return_assigned,
+  collected_from_customer, returned_to_merchant, return_confirmed, financially_reconciled,
+  return_rejected`; extended `payout_status`: `pending, eligible, on_hold, recalculating,
+  reconfirmed, processing, paid, failed, reversed`; `waitlist_status`: `pending, invited, activated,
+  opted_out`; `merchant_suggestion_status`: `suggested, duplicate_check, research_pending, contacted,
+  interested, onboarding, approved, active`; `service_area_type`: `discovery, delivery, collection,
+  route`; extended `evidence_type` returns members: `return_collection, return_handover,
+  return_confirmation`; milestones (`merchant_referral_milestones.milestone`): `suggestion_submitted,
+  merchant_contacted, onboarding_completed, merchant_activated, first_completed_order`.
+
+## 51. Customer accepts all items at delivery (accept_all)
+
+- **Initial state:** delivered order, single Dartford butcher, subtotal `4500`, standard delivery; confirmation window open.
+- **Actors:** Customer, System (auto-confirm job fallback).
+- **Preconditions:** order `delivered`; `delivery_proof` evidence exists; no open rejection/return/refund.
+- **Customer actions:** taps "accept everything" at the door → one bulk `accept_all` action.
+- **DB writes:** `order_confirmations` insert (`scope=order`, `action=accept_all`, `status=confirmed`); fan-out `item_confirmations` insert per item (`decision=accepted`, `order_confirmation_id` set), U`(item_id)`; `market_order_items.item_status: delivered→accepted`; `merchant_sub_orders.accepted_subtotal_cents=4500`.
+- **Status transitions:** order `delivered→completed` (window clears with all-accepted); items `delivered→accepted`; settlement `pending→eligible→...` after window; confirmation `pending→confirmed`.
+- **Notifications:** customer "order confirmed"; merchant "payout pending window"; System auto-confirm skipped (already confirmed).
+- **Evidence created (evidence_type):** `customer_accept` (one per accepted item / bulk).
+- **Payment impact:** already charged `4500 + 199 small_order = 4699`; no change.
+- **Payout impact:** `accepted_subtotal=4500`; commission `round(4500×0.120)=540`; `eligible_cents=4500−540=3960`; payout eligible only **after** confirmation window elapses (delivery alone does not release funds — C33).
+- **Refund impact:** none (`0`).
+- **Completion condition:** all items `accepted` + window clear → order `completed`; settlement `eligible`.
+- **Failure recovery:** if customer takes no action, System auto-confirm writes `item_confirmations decision=accepted` (system actor) + `customer_confirmation_status=auto_confirmed` at window.
+- **Audit trail:** `audit_events` (confirmation), `item_events` per item, `customer_accept` evidence.
+- **Expected result:** merchant paid `3960`, platform keeps `540 + 199`, customer charged `4699`, payout releases post-window. Correct.
+
+## 52. Customer rejects one item, accepts the rest (item-level)
+
+- **Initial state:** delivered single-merchant order; item A meat `3000` + item B mince `1500`, subtotal `4500`, delivery; small_order fee `199`.
+- **Actors:** Customer, Platform (ops review), Finance.
+- **Preconditions:** order `delivered`; window open; per-item confirmation available (C29 — never forced to reject whole order).
+- **Customer actions:** accepts A, rejects B (`reason=poor_quality`) with a photo.
+- **DB writes:** `order_confirmations` (`scope=item`, `action=reject_items`, `status=partially_rejected`); `item_confirmations` A `decision=accepted`, B `decision=rejected`; `item_rejections` insert for B (`qty_rejected=1`, `status=submitted`); on approval `refunds` insert (`scope=item`, `refund_type=partial`, `product_value_cents=1500`, `fee_refund_cents=0`, `amount_cents=1500`); `market_order_items` B `item_status: delivered→rejected`, `refunded_cents=1500`; `merchant_sub_orders.accepted_subtotal_cents: 4500→3000`; `settlement_adjustments` (`amount_cents=-1500`).
+- **Status transitions:** items A `delivered→accepted`, B `delivered→rejected`; rejection `submitted→under_review→approved→resolved`; refund `requested→pending_review→approved→processing→completed`; order `delivered→partially_refunded`; payout `eligible→on_hold→recalculating→reconfirmed`.
+- **Notifications:** customer "item B refunded"; merchant "sub-order recalculated"; finance refund queue.
+- **Evidence created (evidence_type):** `customer_reject` (item B), `customer_accept` (item A).
+- **Payment impact:** original charge `4699` unchanged; refund issued separately.
+- **Payout impact:** recompute on **accepted** gross `3000`: commission `round(3000×0.120)=360`; `eligible_cents=3000−360=2640` (was `3960`). Payout **reconfirmed** before release.
+- **Refund impact:** `1500` product to customer; `fee_refund_cents=0` (small-order fee retained per C32). `amount_cents=1500`.
+- **Completion condition:** rejection `resolved` + refund `completed` + payout `reconfirmed` → settlement `eligible`.
+- **Failure recovery:** refund `processing→failed→processing` retries on same `idempotency_key`; `refunds.stripe_refund_id` U.
+- **Audit trail:** `audit_events` (reject, refund approve), `item_events`, `settlement_adjustments`.
+- **Expected result:** customer refunded `1500`, merchant paid `2640` on the accepted item only, small-order fee retained, payout reconfirmed. Correct.
+
+## 53. Customer rejects items from one merchant in a multi-store order
+
+- **Initial state:** delivered multi-store order, Merchant A meat `3000` + Merchant B meat `3000`, subtotal `6000`, delivery, multistore fee `299`.
+- **Actors:** Customer, Merchant A, Merchant B, Finance.
+- **Preconditions:** two `merchant_sub_orders`; customer rejects one Merchant A item worth `1500`.
+- **Customer actions:** rejects a Merchant A line (`reason=damaged`); accepts everything else.
+- **DB writes:** `order_confirmations` (`scope=item`, `action=reject_items`); `item_confirmations` for all items; `item_rejections` on the A line; `refunds` (`scope=item`, `product_value_cents=1500`, `fee_refund_cents=0`, `amount_cents=1500`, `sub_order_id`=A); A `merchant_sub_orders.accepted_subtotal_cents: 3000→1500`; A `settlement_adjustments` `-1500`. **Merchant B rows untouched.**
+- **Status transitions:** A item `delivered→rejected`; A settlement `eligible→on_hold→recalculating→reconfirmed`; **B settlement stays `eligible`** (isolation); order `delivered→partially_refunded`.
+- **Notifications:** customer refund; Merchant A recalculated; Merchant B nothing.
+- **Evidence created (evidence_type):** `customer_reject` (A line), `damaged_item` on rejection.
+- **Payment impact:** `6299` charge unchanged; refund separate.
+- **Payout impact:** Merchant A recompute on `1500`: commission `round(1500×0.120)=180`; `eligible=1500−180=1320` (was `2640`). Merchant B unchanged: `3000−360=2640`. Multistore `299` retained.
+- **Refund impact:** `1500` to customer; only Merchant A's settlement reduced; `fee_refund_cents=0`.
+- **Completion condition:** A rejection resolved + A payout reconfirmed; B unaffected → both eligible.
+- **Failure recovery:** cross-merchant isolation guarantees a Merchant A problem never mutates Merchant B's settlement/transfer.
+- **Audit trail:** `audit_events`, `item_events` (A only), `settlement_adjustments` (A only).
+- **Expected result:** customer refunded `1500`, Merchant A paid `1320`, Merchant B still `2640`, only A's settlement reduced. Correct.
+
+## 54. Customer rejects the entire cart (reject_order fan-out)
+
+- **Initial state:** delivered single-merchant order, subtotal `4500`, delivery, small_order fee `199`.
+- **Actors:** Customer, Platform (ops), Finance.
+- **Preconditions:** order `delivered`; window open; bulk `reject_order` allowed (fans to item level — truth stays item-level, C29).
+- **Customer actions:** rejects the whole delivery (`reason=poor_quality`) with evidence.
+- **DB writes:** `order_confirmations` (`scope=order`, `action=reject_order`, `status=rejected`); fan-out `item_confirmations decision=rejected` for **every** item; `item_rejections` per item; `refunds` (`scope=order`, `refund_type=full`, `product_value_cents=4500`, `fee_refund_cents=0`, `amount_cents=4500`); each item `item_status→rejected`, `refunded_cents` set; `merchant_sub_orders.accepted_subtotal_cents→0`; `settlement_adjustments` reducing to nil.
+- **Status transitions:** all items `delivered→rejected`; order `delivered→partially_refunded` then effectively fully refunded (all lines nil); settlement `eligible→on_hold→recalculating→reconfirmed` (reconfirms to `0`).
+- **Notifications:** customer "full product refund"; merchant "sub-order settled to nil"; ops dispute review.
+- **Evidence created (evidence_type):** `customer_reject` per item.
+- **Payment impact:** original `4699`; product `4500` refunded, service fee `199` **retained** (C32).
+- **Payout impact:** `accepted_subtotal=0` → commission `round(0×0.120)=0`; `eligible_cents=0`. **All settlements → nil.**
+- **Refund impact:** `product_value_cents=4500`, `fee_refund_cents=0`, `amount_cents=4500`; small-order fee `199` retained.
+- **Completion condition:** all rejections resolved + refund completed + payout reconfirmed to `0`.
+- **Failure recovery:** if a fee override is later warranted, follow scenario 60; otherwise fee stays retained.
+- **Audit trail:** `audit_events`, one refund row scope=order, per-item `item_events`.
+- **Expected result:** customer refunded `4500` product only, service fee `199` retained, merchant payout nil. Correct.
+
+## 55. Customer requests an item return before the driver leaves
+
+- **Initial state:** driver at the door, order `delivered`; customer wants to send back one damaged pack worth `800`; still inside the delivery interaction.
+- **Actors:** Customer, Driver, Operations.
+- **Preconditions:** item eligible for physical return (C30); returns are manually handled but fully represented + audited.
+- **Customer actions:** requests a return on that line (`action=request_return`) before the driver departs.
+- **DB writes:** `order_confirmations` (`scope=item`, `action=request_return`); `item_returns` insert (`item_id`, `target_merchant_id`, `quantity=1`, `reason='damaged'`, `status=return_requested`, `return_deadline`=end of operating day); `item_confirmations` for the line held pending return outcome; customer evidence linked (`customer_evidence_id`).
+- **Status transitions:** return `return_requested` (awaiting ops approval → `return_approved`); item stays `delivered` pending physical return; no refund yet.
+- **Notifications:** customer "return logged, deadline today"; ops return queue; driver "hold for return pickup".
+- **Evidence created (evidence_type):** `return_collection` (customer-side / damaged item), `damaged_item`.
+- **Payment impact:** none yet — money moves only on `financially_reconciled`.
+- **Payout impact:** payout for that sub-order held pending return (`eligible→on_hold`); accepted_subtotal not yet reduced.
+- **Refund impact:** `0` so far; refund is created at reconciliation (scenario 56).
+- **Completion condition:** return progressed to `return_approved→return_assigned` within operating day.
+- **Failure recovery:** if deadline slips → scenario 57; if merchant refuses → scenario 58.
+- **Audit trail:** `audit_events` (return requested), `item_events`, immutable customer evidence.
+- **Expected result:** return captured as `return_requested` with EOD deadline, item still in delivery flow, no premature money movement. Correct.
+
+## 56. Driver returns the item to the merchant before end of day
+
+- **Initial state:** approved return from scenario 55 (`item_returns.status=return_approved`), item worth `800`, within operating day.
+- **Actors:** Driver (assigned operator), Merchant, Operations, Finance.
+- **Preconditions:** `return_deadline` not passed; driver assigned as `assigned_operator_id`; same-day return to merchant.
+- **Driver/Merchant actions:** driver collects from customer, transports to merchant, hands over; merchant confirms receipt.
+- **DB writes:** `item_returns.status` walks `return_approved→return_assigned→collected_from_customer→returned_to_merchant→return_confirmed`; `merchant_confirmed_at` set; `merchant_evidence_id` set; on `financially_reconciled` a `refunds` insert (`scope=item`, `product_value_cents=800`, `fee_refund_cents=0`, `amount_cents=800`); `merchant_sub_orders.accepted_subtotal_cents −= 800`; `settlement_adjustments −800`.
+- **Status transitions:** return `...→returned_to_merchant→return_confirmed→financially_reconciled`; item `delivered→rejected` (returned line generates no payout); payout `on_hold→recalculating→reconfirmed→eligible`.
+- **Notifications:** customer "return complete, refund issued"; merchant "return confirmed"; finance reconciliation.
+- **Evidence created (evidence_type):** `return_handover` (driver→merchant), `return_confirmation` (merchant receipt).
+- **Payment impact:** `800` product refunded to customer; service fee retained.
+- **Payout impact:** merchant gross drops by `800`; commission recomputed on the reduced accepted gross; payout **reconfirmed** before release (C33). `financially_reconciled` triggers settlement recalculation.
+- **Refund impact:** `product_value_cents=800`, `fee_refund_cents=0`, `amount_cents=800`.
+- **Completion condition:** `return_confirmed` + `financially_reconciled` + payout `reconfirmed`.
+- **Failure recovery:** merchant refusal at handover → scenario 58 (`return_rejected` → dispute).
+- **Audit trail:** `audit_events` per transition, `return_handover`/`return_confirmation` evidence, `settlement_adjustments`.
+- **Expected result:** goods back with merchant same day, customer refunded `800` product, merchant settlement reduced and payout reconfirmed. Correct.
+
+## 57. Return cannot be completed before end of day
+
+- **Initial state:** approved return in transit; `return_deadline` (end of operating day) arrives with the item still at `collected_from_customer`.
+- **Actors:** Driver, Operations, System (deadline check).
+- **Preconditions:** returns are manual-ops; missing the deadline is an ops-handled exception, not a state-machine failure.
+- **System/Ops actions:** deadline check flags the overdue return; ops carries it overnight and reschedules merchant handover next operating day.
+- **DB writes:** `item_returns` stays `return_assigned`/`collected_from_customer` (no forbidden skip to `returned_to_merchant`); `admin_notes` records the overrun; **no** `refunds` row yet; no settlement change.
+- **Status transitions:** return holds at `collected_from_customer` overnight; **no** `financially_reconciled`; payout stays `on_hold` (not reconfirmed).
+- **Notifications:** ops "return overdue"; customer "return in progress"; finance "reconciliation pending".
+- **Evidence created (evidence_type):** `return_collection` retained; `return_handover` not yet created.
+- **Payment impact:** none — money waits for reconciliation.
+- **Payout impact:** merchant payout remains `on_hold` (delivery-time return still open → cannot go `eligible`).
+- **Refund impact:** `0` until the return confirms next day.
+- **Completion condition:** next-day handover resumes `→returned_to_merchant→return_confirmed→financially_reconciled`.
+- **Failure recovery:** ops reschedule; state never illegally advances; audit captures the overrun and reason.
+- **Audit trail:** `audit_events` (deadline miss, `admin_notes`), `item_events`, no premature financial rows.
+- **Expected result:** overnight hold with no money movement, payout stays on_hold, return resumes and reconciles the next operating day. Correct.
+
+## 58. Merchant refuses the returned item (return_rejected → dispute)
+
+- **Initial state:** driver presents returned item (`800`); merchant inspects and refuses it (claims not their stock / not defective).
+- **Actors:** Driver, Merchant, Operations (dispute), Finance.
+- **Preconditions:** `item_returns.status=return_approved`/`returned_to_merchant`; merchant refuses on inspection.
+- **Merchant/Ops actions:** merchant declines receipt; ops opens a dispute; financial reconciliation is held pending resolution.
+- **DB writes:** `item_returns.status→return_rejected`; `admin_notes` + merchant reason; `evidence_media.locked_at` set on the return chain (dispute opened → no further supersede); **no** `refunds` row auto-created; settlement **not** recalculated yet.
+- **Status transitions:** return `return_approved→return_rejected`; linked `item_rejections` may go `under_review→merchant_disputed`; payout stays `on_hold` (reconciliation held).
+- **Notifications:** customer "return under review"; merchant dispute logged; ops/finance dispute queue.
+- **Evidence created (evidence_type):** `return_confirmation` refusal note, `damaged_item`; evidence chain **locked**.
+- **Payment impact:** none until dispute resolves.
+- **Payout impact:** held at `on_hold`; not reconfirmed while the return/dispute is open (gate forbids `eligible` with an open return).
+- **Refund impact:** `0` pending decision; if ops later side with customer, a `refunds` row (`800`) + `settlement_adjustments` are created then.
+- **Completion condition:** dispute resolved by ops → either refund + settlement adjustment, or return closed with no refund.
+- **Failure recovery:** locked immutable evidence anchors the dispute; decision recorded with authorised actor + reason.
+- **Audit trail:** `audit_events` (refusal, dispute, resolution), locked `evidence_media`, `item_events`.
+- **Expected result:** refused return parks reconciliation in a dispute; no money moves and payout stays held until an authorised decision. Correct.
+
+## 59. Refund approved but service fee retained
+
+- **Initial state:** approved item refund; item product value `1200`; order carried small_order fee `199` (service) and no priority fee.
+- **Actors:** Customer, Finance.
+- **Preconditions:** default fee policy — **service fee retained** (C32, N1: small-order = retained service/handling).
+- **Finance actions:** approve refund of product value only.
+- **DB writes:** `refunds` insert (`scope=item`, `refund_type=partial`, `product_value_cents=1200`, `fee_refund_cents=0`, `is_fee_override=false`, `amount_cents=1200`); `market_order_items.refunded_cents=1200`, `item_status→rejected`; `merchant_sub_orders.accepted_subtotal_cents −= 1200`; `settlement_adjustments −1200`.
+- **Status transitions:** refund `requested→pending_review→approved→processing→completed`; payout `eligible→on_hold→recalculating→reconfirmed`.
+- **Notifications:** customer "£12.00 refunded, service fee retained"; finance ledger.
+- **Evidence created (evidence_type):** `customer_reject`/`damaged_item` as basis.
+- **Payment impact:** `1200` returned; `199` small-order fee kept as platform revenue.
+- **Payout impact:** merchant gross reduced by `1200`; commission recomputed on reduced accepted gross; payout reconfirmed.
+- **Refund impact:** `product_value_cents=1200`, `fee_refund_cents=0`, `amount_cents=1200`. Worked: customer out-of-pocket net includes the retained `199`.
+- **Completion condition:** refund `completed` + payout `reconfirmed`.
+- **Failure recovery:** Stripe failure retries on same `idempotency_key`; `stripe_refund_id` U prevents double refund.
+- **Audit trail:** `audit_events` (approve), `refunds` row with `is_fee_override=false`, `settlement_adjustments`.
+- **Expected result:** exactly `1200` refunded, service fee `199` retained by default, no override recorded. Correct.
+
+## 60. Admin overrides and refunds the service fee
+
+- **Initial state:** same `1200` item refund as scenario 59, but the service failure warrants refunding the `199` small-order fee too.
+- **Actors:** Customer, Finance staff / Platform admin (authorised override only).
+- **Preconditions:** override requires role ≥ `finance_staff`/`platform_admin`; mandatory reason + amount + timestamp + audit (C32, §5).
+- **Admin actions:** authorises a fee override on the small-order fee component.
+- **DB writes:** `refunds` insert/update (`product_value_cents=1200`, `fee_refund_cents=199`, `is_fee_override=true`, `fee_override_component='small_order_fee'`, `fee_override_reason` set, `fee_override_by`=finance user, `amount_cents=1399`); `settlement_adjustments −1200` (fee is platform-side, not merchant gross).
+- **Status transitions:** refund `approved→processing→completed`; payout `eligible→on_hold→recalculating→reconfirmed`.
+- **Notifications:** customer "£13.99 refunded incl. service fee"; finance override log.
+- **Evidence created (evidence_type):** original rejection evidence + override note (audit, not media).
+- **Payment impact:** `1399` returned (`1200` product + `199` fee).
+- **Payout impact:** merchant gross reduced by product `1200` only (fee never was merchant gross); commission recomputed; payout reconfirmed. Fee refund is a **platform** write-off, not a merchant adjustment.
+- **Refund impact:** `product_value_cents=1200`, `fee_refund_cents=199`, `amount_cents=1399`, `is_fee_override=true`.
+- **Completion condition:** refund `completed` with full override audit present (actor + reason + amount + timestamp).
+- **Failure recovery:** RPC rejects the override if actor role < finance/admin or if reason/amount missing.
+- **Audit trail:** mandatory `audit_events` row for the override (enforced), `refunds.fee_override_by/reason`.
+- **Expected result:** `1399` refunded with a fully audited fee override; only finance/admin could authorise; merchant gross reduced by product only. Correct.
+
+## 61. Merchant settlement recalculated after item rejection
+
+- **Initial state:** merchant sub-order gross `5000` (delivery), settlement already computed; one item worth `1000` rejected post-delivery.
+- **Actors:** Customer, Finance, System (settlement recalc).
+- **Preconditions:** payout not yet paid; rejection approved; recompute on accepted items only (C14/C33).
+- **Customer/Finance actions:** rejection approved → refund `1000` → settlement recalc triggered.
+- **DB writes:** `merchant_sub_orders.accepted_subtotal_cents: 5000→4000`; `refunds` (`product_value_cents=1000`, `amount_cents=1000`); `merchant_settlements.commission_cents` recomputed; `merchant_settlements.eligible_cents` recomputed; `settlement_adjustments −1000`.
+- **Status transitions:** payout `on_hold→recalculating→reconfirmed`; item `delivered→rejected`.
+- **Notifications:** merchant "settlement recalculated"; finance.
+- **Evidence created (evidence_type):** `customer_reject` basis.
+- **Payment impact:** `1000` refunded to customer; fees retained.
+- **Payout impact (worked):** was `gross 5000 − round(5000×0.120)=600 = eligible 4400`; now `gross_accepted 4000 − round(4000×0.120)=480 = eligible 3520`. Commission recomputed **once** on accepted gross (never re-rounded per item).
+- **Refund impact:** `1000` product; `fee_refund_cents=0`.
+- **Completion condition:** settlement `reconfirmed` with `eligible_cents=3520`.
+- **Failure recovery:** recompute is idempotent from current accepted lines; adjustments append, never overwrite prior figures.
+- **Audit trail:** `audit_events`, `settlement_adjustments`, `merchant_settlements` history via events.
+- **Expected result:** accepted_subtotal `4000`, commission `480`, eligible `3520`; payout on_hold→recalculating→reconfirmed. Correct.
+
+## 62. Eligible payout becomes held after a late delivery-time issue
+
+- **Initial state:** sub-order delivered, confirmation window looked clear, settlement already `eligible` at `3960` (gross `4500`, commission `540`); then a late delivery-time issue (short-dated item worth `900`) is raised inside the window.
+- **Actors:** Customer, Finance, System.
+- **Preconditions:** payout `eligible` but **not yet** `processing`/`paid`; any delivery-time return/refund/rejection forces reconfirmation (C33).
+- **Customer/Finance actions:** customer reports the item; refund `900` approved.
+- **DB writes:** `refunds` (`product_value_cents=900`, `amount_cents=900`); `merchant_sub_orders.accepted_subtotal_cents: 4500→3600`; `settlement_adjustments −900`; `merchant_settlements.eligible_cents` recomputed.
+- **Status transitions:** payout `eligible→on_hold→recalculating→reconfirmed→eligible` (full loop); item `delivered→rejected`.
+- **Notifications:** merchant "payout recalculated before release"; finance.
+- **Evidence created (evidence_type):** `customer_reject`/`damaged_item`.
+- **Payment impact:** `900` refunded; fees retained.
+- **Payout impact (worked):** recompute on `3600`: commission `round(3600×0.120)=432`; `eligible_cents=3600−432=3168` (was `3960`). Reconfirmed value released only after the loop closes.
+- **Refund impact:** `900` product; `fee_refund_cents=0`.
+- **Completion condition:** payout back to `eligible` at `3168` after reconfirmation; then `processing→paid`.
+- **Failure recovery:** because it was not yet `paid`, no clawback needed; had it been paid, `paid→reversed` (rare, flagged) applies.
+- **Audit trail:** `audit_events` (hold, recalc, reconfirm), `settlement_adjustments`.
+- **Expected result:** previously-eligible payout correctly forced through `on_hold→recalculating→reconfirmed→eligible`, landing at `3168`. Correct.
+
+## 63. Full order refund across multiple merchants
+
+- **Initial state:** delivered multi-store order, Merchant A `3000` + Merchant B `3000`, subtotal `6000`, multistore fee `299`, delivery.
+- **Actors:** Customer, Operations, Finance.
+- **Preconditions:** whole-order rejection approved; two sub-orders each settle to nil; service fees retained unless override (C32).
+- **Customer actions:** rejects the entire order (`action=reject_order`).
+- **DB writes:** `order_confirmations` (`scope=order`, `action=reject_order`); fan-out `item_confirmations decision=rejected`; **N=2** `refunds` rows (one per sub-order: A `product_value_cents=3000`, B `product_value_cents=3000`, each `fee_refund_cents=0`, `amount_cents=3000`); both `merchant_sub_orders.accepted_subtotal_cents→0`; two `settlement_adjustments` to nil.
+- **Status transitions:** all items `delivered→rejected`; both settlements `eligible→on_hold→recalculating→reconfirmed` (to `0`); order `delivered→partially_refunded` (fully, product-wise).
+- **Notifications:** customer full product refund; both merchants "settled to nil"; finance.
+- **Evidence created (evidence_type):** `customer_reject` per item.
+- **Payment impact:** product `6000` refunded (`3000`+`3000`); multistore fee `299` **retained**.
+- **Payout impact:** each merchant `accepted_subtotal=0` → commission `0` → `eligible_cents=0`; **no transfers**.
+- **Refund impact:** two refunds totalling `6000` product; `fee_refund_cents=0` each; `299` retained.
+- **Completion condition:** both settlements reconfirmed to `0`; both refunds `completed`.
+- **Failure recovery:** each merchant's refund/adjustment is independent + idempotent; one failing does not block the other.
+- **Audit trail:** `audit_events`, two `refunds`, two `settlement_adjustments`, per-item `item_events`.
+- **Expected result:** customer refunded `6000` product, multistore `299` retained, both merchant payouts nil, N=2 refunds. Correct.
+
+## 64. Platform-owned eggs refunded while merchant goods are accepted
+
+- **Initial state:** delivered mixed order — merchant meat `4000` (accepted) + platform eggs `500` (bad on arrival), delivery, small_order fee `199`.
+- **Actors:** Customer, Platform (inventory/finance), Merchant (unaffected).
+- **Preconditions:** eggs are on the **platform sub-order** (`merchant_id=null`); merchant sub-order fulfilled fine (A5).
+- **Customer actions:** accepts merchant meat, rejects the platform egg line.
+- **DB writes:** `item_confirmations` meat `accepted`, eggs `rejected`; `refunds` (`scope=item`, `sub_order_id`=platform sub-order, `product_value_cents=500`, `fee_refund_cents=0`, `amount_cents=500`); platform sub-order `accepted_subtotal_cents: 500→0`; `inventory_movements` reason=`adjust` (write-off the bad eggs). **Merchant sub-order untouched.**
+- **Status transitions:** egg item `delivered→rejected`; merchant items `delivered→accepted`; **no** merchant payout state change; order `delivered→partially_refunded`.
+- **Notifications:** customer "eggs refunded"; ops inventory; merchant nothing.
+- **Evidence created (evidence_type):** `customer_reject`/`damaged_item` on the egg line.
+- **Payment impact:** `500` refunded (platform absorbs, platform-owned goods); merchant meat charge stands.
+- **Payout impact:** **none to merchant** — commission `round(4000×0.120)=480`, `eligible=4000−480=3520` unchanged. Platform eats its own eggs' cost via `inventory_movements` write-off; no `merchant_settlements`/`settlement_adjustments` on any merchant.
+- **Refund impact:** `product_value_cents=500`, `fee_refund_cents=0`, `amount_cents=500` (platform-side write-off).
+- **Completion condition:** egg refund `completed`; merchant settlement stays `eligible` at `3520`.
+- **Failure recovery:** platform inventory decides restock vs write-off; merchant flow never re-opens.
+- **Audit trail:** `audit_events`, `inventory_movements` (reason=adjust), `refunds`.
+- **Expected result:** eggs refunded `500` against the platform sub-order only; merchant paid `3520` normally with zero payout impact. Correct.
+
+## 65. Water returned due to damage
+
+- **Initial state:** delivered order includes platform water `1000` (delivery-only, platform-owned); customer reports leaking/damaged bottles and requests a return.
+- **Actors:** Customer, Driver, Platform (inventory/ops).
+- **Preconditions:** water is on the platform sub-order; returns manual-ops (C30); platform decides restock vs write-off.
+- **Customer/Driver actions:** return requested; driver collects damaged water from customer.
+- **DB writes:** `item_returns` insert (`target_merchant_id=null` — platform sub-order, `quantity`, `reason='damaged'`, `status=return_requested→...→return_confirmed→financially_reconciled`, `return_deadline`=EOD); `refunds` (`scope=item`, platform sub-order, `product_value_cents=1000`, `amount_cents=1000`); `inventory_movements` reason=`adjust` (write-off) **or** `restock` if resellable (platform decision, `balance_after` updated).
+- **Status transitions:** return `return_requested→return_approved→return_assigned→collected_from_customer→returned_to_merchant→return_confirmed→financially_reconciled`; water item `delivered→rejected`.
+- **Notifications:** customer "water refunded"; ops inventory decision; driver pickup task.
+- **Evidence created (evidence_type):** `damaged_item`, `return_collection`, `return_confirmation`.
+- **Payment impact:** `1000` refunded (platform absorbs).
+- **Payout impact:** none — platform-owned; **no merchant settlement/transfer touched**.
+- **Refund impact:** `product_value_cents=1000`, `fee_refund_cents=0`, `amount_cents=1000`.
+- **Completion condition:** return `financially_reconciled` + inventory movement recorded (restock or writeoff).
+- **Failure recovery:** if bottles resellable → `inventory_movements reason=restock` returns stock; if not → `reason=adjust` write-off.
+- **Audit trail:** `audit_events`, `item_returns` chain, `inventory_movements`, `refunds`.
+- **Expected result:** damaged water returned and refunded `1000` on the platform sub-order; inventory restock/writeoff logged; no merchant impact. Correct.
+
+## 66. Customer joins the Eltham waitlist
+
+- **Initial state:** authenticated user whose postcode maps to the **Eltham** hub, which is not yet live for ordering.
+- **Actors:** Customer, System (demand count), Operations (later invite).
+- **Preconditions:** hub `launch_areas` row for Eltham (`is_hub=true`); one active membership per user/email per hub (partial-unique, C25); **no votes counter**.
+- **Customer actions:** submits postcode + email to join the waitlist.
+- **DB writes:** `location_waitlist` insert (`launch_area_id`=Eltham, `status=pending`, `postcode`, `source`, `referral_code` nullable, `joined_at=now()`); U`(user_id, launch_area_id)` / U`(lower(email), launch_area_id)` WHERE status in (`pending`,`invited`) prevents a duplicate active row.
+- **Status transitions:** waitlist `pending` (later `invited→activated`, or `opted_out` if they leave).
+- **Notifications:** customer "you're on the Eltham list"; ops demand dashboard.
+- **Evidence created (evidence_type):** none.
+- **Payment impact:** none.
+- **Payout impact:** none.
+- **Refund impact:** none (`0`).
+- **Completion condition:** row `pending`; **demand for Eltham = COUNT of rows WHERE status in (`pending`,`invited`)** for that hub (no mutable counter).
+- **Failure recovery:** a repeat join by the same user/email for Eltham is a safe no-op (partial-unique); joining a *different* hub is a separate allowed row.
+- **Audit trail:** `audit_events` (join), `location_waitlist` timestamps.
+- **Expected result:** one active Eltham membership at `pending`; demand computed by counting active entries, not a votes field. Correct.
+
+## 67. Customer postcode maps to more than one discovery hub
+
+- **Initial state:** a postcode that falls inside the 5-mile discovery radius of **both** Eltham and Erith hubs.
+- **Actors:** Customer, System (nearest-hub compute).
+- **Preconditions:** discovery = `ST_DWithin` from each hub centroid; nearest hub chosen at address save (N4 default: nearest live hub, list others).
+- **Customer actions:** saves an address.
+- **DB writes:** `user_addresses` insert with `location`; compute `nearest_hub_id` = closest hub by `hub_distance_m`; `hub_distance_m` stored (computed at save, never at query time).
+- **Status transitions:** none (geography, not order lifecycle).
+- **Notifications:** customer "your hub: Eltham (nearest); also near Erith".
+- **Evidence created (evidence_type):** none.
+- **Payment impact:** none.
+- **Payout impact:** none.
+- **Refund impact:** none.
+- **Completion condition:** `nearest_hub_id` set to the closest **live** hub; other in-range hubs surfaced as alternatives (N4).
+- **Failure recovery:** if the nearest hub is not live, fall back to the nearest live hub in range; if none live, offer waitlist (scenario 66).
+- **Audit trail:** `audit_events` (address save), stored `nearest_hub_id`/`hub_distance_m`.
+- **Expected result:** deterministic nearest-hub assignment with alternatives listed; distance precomputed at save. Correct (pending N4 UX ratification).
+
+## 68. Inside five-mile discovery but outside the delivery service zone
+
+- **Initial state:** customer postcode inside the Dartford hub's 5-mile `discovery` zone but **outside** any active `delivery` zone / live route.
+- **Actors:** Customer, System (eligibility checks).
+- **Preconditions:** discovery ≠ delivery eligibility (C19/C23); delivery re-checked at basket-price time, not just discovery.
+- **Customer actions:** browses (discovery passes), then tries to price a delivery basket.
+- **DB writes:** none committed for the blocked delivery order; basket may fall back to `collection` if inside a `collection` zone + a merchant with `collection_enabled`.
+- **Status transitions:** basket stays `open`/re-`priced` without a delivery method; no `market_orders` row for delivery.
+- **Notifications:** customer "discovery yes, delivery not available here yet"; offer collection if eligible; else waitlist.
+- **Evidence created (evidence_type):** none.
+- **Payment impact:** none (order blocked pre-charge).
+- **Payout impact:** none.
+- **Refund impact:** none.
+- **Completion condition:** delivery blocked because `ST_Covers` on the active `delivery` zone fails / no active `route` zone; collection offered where valid.
+- **Failure recovery:** customer switches to collection (if in a `collection` zone) or joins the hub waitlist for delivery expansion.
+- **Audit trail:** `audit_events` (eligibility check outcome).
+- **Expected result:** discovery via `ST_DWithin` from the hub succeeds while delivery is correctly blocked at the price step; collection offered when applicable. Correct.
+
+## 69. Customer suggests a duplicate merchant
+
+- **Initial state:** customer suggests a butcher already present (as an active merchant or an existing suggestion).
+- **Actors:** Customer, Operations (dedupe), System (duplicate detection).
+- **Preconditions:** dedupe via `lower(merchant_name)` + GiST `location`; reward never on submission (C27).
+- **Customer actions:** submits a merchant suggestion (name/address/category/contact).
+- **DB writes:** `merchant_suggestions` insert then `status=duplicate_check`; detection sets `duplicate_of` = the existing suggestion/merchant; **no** new `merchant_referral_milestones` row beyond nothing rewardable; no `reward_ledger` entry.
+- **Status transitions:** suggestion `suggested→duplicate_check` (parks as duplicate); **no** `suggestion_submitted` reward-bearing progression toward onboarding.
+- **Notifications:** customer "already on our radar — thanks"; ops dedupe log.
+- **Evidence created (evidence_type):** none.
+- **Payment impact:** none.
+- **Payout impact:** none.
+- **Refund impact:** none.
+- **Completion condition:** `duplicate_of` set; no milestone reached, no reward accrued.
+- **Failure recovery:** if dedupe was wrong, ops clears `duplicate_of` and lets the lifecycle proceed normally.
+- **Audit trail:** `audit_events` (dedupe decision), `merchant_suggestions.duplicate_of`.
+- **Expected result:** duplicate parked with `duplicate_of` set, no new milestone, no reward. Correct.
+
+## 70. Customer-generated merchant QR code results in onboarding
+
+- **Initial state:** customer shares their referral QR/URL with a local merchant who scans it and later onboards.
+- **Actors:** Customer (referrer), Merchant, Operations, System (rewards).
+- **Preconditions:** attribution via `referral_url`/`qr_code_path`; rewards accrue only at `onboarding_completed`+ (C27, never on submission).
+- **Customer/Merchant actions:** merchant scans QR → suggestion attributed → ops progress the merchant to activation.
+- **DB writes:** `merchant_suggestions` insert (`referral_url`, `qr_code_path`, `referrer_user_id`); `merchant_referral_milestones` rows appended as reached: `suggestion_submitted`(no reward) → `merchant_contacted` → `onboarding_completed` (reward accrues) → `merchant_activated`; `merchant_suggestions.onboarded_merchant_id` set; `reward_ledger` insert (`kind=points`) at `onboarding_completed`; `merchant_suggestions.status` walks `suggested→...→onboarding→approved→active`.
+- **Status transitions:** milestones `suggestion_submitted→merchant_contacted→onboarding_completed→merchant_activated`; suggestion lifecycle to `active`.
+- **Notifications:** referrer "your merchant onboarded — points earned"; ops onboarding.
+- **Evidence created (evidence_type):** none (media); milestones + ledger are the record.
+- **Payment impact:** none.
+- **Payout impact:** none (merchant payouts are order-driven, separate).
+- **Refund impact:** none.
+- **Completion condition:** `onboarding_completed`/`merchant_activated` reached → `merchant_referral_milestones.rewarded=true`, points in `reward_ledger` (whole points, no cash value — C13).
+- **Failure recovery:** if onboarding stalls before `onboarding_completed`, no reward accrues (scenario 71).
+- **Audit trail:** `audit_events`, `merchant_referral_milestones` (U per `(suggestion_id, milestone)`), `reward_ledger`.
+- **Expected result:** QR-attributed onboarding accrues referrer points at `onboarding_completed`+, merchant reaches `active`. Correct.
+
+## 71. Merchant referral submitted but merchant never activates
+
+- **Initial state:** customer submits a merchant suggestion; the merchant is contacted but declines / goes cold — never onboards.
+- **Actors:** Customer (referrer), Operations, System.
+- **Preconditions:** reward gated on `onboarding_completed`+ (C27); submission alone earns nothing.
+- **Customer/Ops actions:** suggestion submitted; ops attempt contact; merchant does not proceed.
+- **DB writes:** `merchant_suggestions` insert; `merchant_referral_milestones` row `suggestion_submitted` only (optionally `merchant_contacted`); **no** `onboarding_completed`/`merchant_activated` rows; **no** `reward_ledger` entry.
+- **Status transitions:** suggestion `suggested→contacted` then stalls (may end `research_pending`); milestone chain stops before any reward-bearing stage.
+- **Notifications:** ops "merchant declined"; referrer no reward notification.
+- **Evidence created (evidence_type):** none.
+- **Payment impact:** none.
+- **Payout impact:** none.
+- **Refund impact:** none.
+- **Completion condition:** only `suggestion_submitted` (and maybe `merchant_contacted`) reached; `rewarded=false`; **no completed-referral reward**.
+- **Failure recovery:** if the merchant later revives, the same suggestion can progress and reward then (milestones U per stage prevent double-award).
+- **Audit trail:** `audit_events`, `merchant_referral_milestones` (submission only), empty reward ledger for this referral.
+- **Expected result:** no reward because no reward-bearing milestone was reached. Correct.
+
+## 72. Merchant activates but generates no completed orders
+
+- **Initial state:** referred merchant reaches `merchant_activated`, but never fulfils a first completed order.
+- **Actors:** Customer (referrer), Merchant, System (rewards).
+- **Preconditions:** `merchant_activated` is a reward-bearing milestone; `first_completed_order` is a separate later milestone.
+- **Merchant actions:** goes live but has zero completed marketplace orders.
+- **DB writes:** `merchant_referral_milestones` rows up to `merchant_activated` (reward per C27 at activation); **no** `first_completed_order` row; any reward tied specifically to a first completed order is **not** written.
+- **Status transitions:** milestones stop at `merchant_activated`; `first_completed_order` **not reached**.
+- **Notifications:** referrer "activation reward"; no first-order reward.
+- **Evidence created (evidence_type):** none.
+- **Payment impact:** none.
+- **Payout impact:** none.
+- **Refund impact:** none.
+- **Completion condition:** `merchant_activated` rewarded (if that stage carries a reward); `first_completed_order` remains unreached and unrewarded.
+- **Failure recovery:** when the merchant later completes a first order, `first_completed_order` milestone is appended and any first-order reward accrues then (U prevents duplication).
+- **Audit trail:** `audit_events`, `merchant_referral_milestones` (through `merchant_activated`), `reward_ledger` for reached stages only.
+- **Expected result:** activation-stage reward accrues; first-order reward correctly withheld until `first_completed_order`. Correct.
+
+## 73. Super-admin assigns the first merchant admin
+
+- **Initial state:** freshly onboarded merchant with no staff; super-admin bootstrap identity **`abidoyedimeji`** seeded in `platform_staff` (`role=super_admin`).
+- **Actors:** Super-admin (`platform_staff.super_admin`), new merchant admin user.
+- **Preconditions:** DB-backed roles mandatory (C28); `merchant_staff` is the per-merchant assignment + isolation boundary; privileged write via RPC/service-role after authz.
+- **Super-admin actions:** creates the first `merchant_admin` assignment for that merchant.
+- **DB writes:** `merchant_staff` insert (`merchant_id`, `user_id`, `role=merchant_admin`, `status=invited`→`active`, `invited_by`=super_admin); U`(merchant_id, user_id)`; `audit_events` row for the privileged role grant.
+- **Status transitions:** merchant_staff `invited→active`; no order lifecycle change.
+- **Notifications:** new admin "you now manage <merchant>"; super-admin confirmation.
+- **Evidence created (evidence_type):** none (audit is the record).
+- **Payment impact:** none.
+- **Payout impact:** none.
+- **Refund impact:** none.
+- **Completion condition:** `merchant_staff` row `active`; the admin can now manage **only** that assigned merchant.
+- **Failure recovery:** only `super_admin`/`platform_admin` may write `platform_staff`/high-level assignments; non-authorised callers are denied by RLS + RPC authz.
+- **Audit trail:** `audit_events` (role grant, actor=super_admin `abidoyedimeji`), `merchant_staff` timestamps.
+- **Expected result:** first merchant admin provisioned by the super-admin, scoped to one merchant, fully audited. Correct.
+
+## 74. Merchant admin attempts to access another merchant's data
+
+- **Initial state:** `merchant_admin` active for Merchant A tries to read Merchant B's sub-orders/products/settlements/customers.
+- **Actors:** Merchant A admin (attacker context), Platform (RLS/audit).
+- **Preconditions:** every merchant-scoped policy joins `merchant_staff … status='active'` on the row's `merchant_id`; cross-merchant isolation mandatory (C28, §6).
+- **Merchant A admin actions:** issues queries/writes targeting Merchant B rows.
+- **DB writes:** **none** — the `EXISTS(select 1 from merchant_staff ms where ms.merchant_id = <B row>.merchant_id and ms.user_id=auth.uid() and status='active')` predicate fails; RLS denies read/write; a denied-access `audit_events` row is written server-side.
+- **Status transitions:** none (access denied; no state change to any Merchant B entity).
+- **Notifications:** ops/security "cross-merchant access denied" (if alerting enabled).
+- **Evidence created (evidence_type):** none; the audit event is the record.
+- **Payment impact:** none.
+- **Payout impact:** none — Merchant B settlements/transfers never resolve for Merchant A.
+- **Refund impact:** none.
+- **Completion condition:** zero rows returned/written for Merchant B; isolation holds.
+- **Failure recovery:** deny-by-default means even a policy gap fails closed; `market_orders` is never exposed whole to a merchant (only its own sub-orders + minimum customer data).
+- **Audit trail:** `audit_events` (denied cross-merchant access, actor, entity_type/id attempted).
+- **Expected result:** Merchant A admin sees nothing of Merchant B; RLS join fails, access denied, attempt audited, isolation intact. Correct.
