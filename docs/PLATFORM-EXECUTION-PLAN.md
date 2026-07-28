@@ -22,11 +22,15 @@ ends and Farmers-Market-specific logic begins (ADR `README`).
 Each wave is one coherent concept, its own migration(s), its own gate. **No wave advances because
 code compiles — it advances when its gate passes** (see §5 stage gates).
 
-### Wave 1A — Identity & organisations
+### Wave 1A — Identity & organisations ✅ COMPLETE (migrations 0011–0013)
 Build: platform roles · `platform_staff` memberships · merchant organisations · merchant stores ·
 `merchant_staff` memberships · `drivers` · role assignment/revocation · **super-admin bootstrap to the
 real Supabase user for `abidoyedimeji`** · cross-merchant isolation helpers.
-**Gate:** Merchant A cannot query Merchant B's private data — even with direct API requests.
+**Gate — PASSED:** Merchant A cannot query Merchant B's private data even with a simulated JWT
+(proved: sees 1 own / 0 other); anon denied by grants; no direct writes; no role self-escalation;
+bootstrap idempotent; invite-on-auth attaches to the real `auth.users.id`. Details in
+`BUILDLOG.md` and `supabase/tests/wave1a_verification.sql`. **Do not begin Wave 1B automatically —
+awaiting review.**
 
 ### Wave 1B — Audit & immutable events
 Build: `audit_events` (actor identity · entity type/id · action · before/after summary · correlation
