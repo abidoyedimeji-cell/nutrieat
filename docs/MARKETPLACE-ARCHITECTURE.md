@@ -21,6 +21,18 @@ cookbook and marketplace orders stay in **separate** lifecycles.
 > lifecycle. These are **confirmed, not assumptions**. See [`MARKETPLACE-DECISIONS.md`](./MARKETPLACE-DECISIONS.md)
 > §Amendment-1 change summary.
 
+> **Amendment 2 (2026-07-28) — CONFIRMED delivery-confirmation, issue, return, liability &
+> reconciliation model.** Customer confirmation happens **with the driver present** (driver may not
+> close the delivery until the customer reviews). Issue/refund/**return**/**liability** are kept as
+> **separate orthogonal dimensions** (never combined). Same-driver same-day returns with a return
+> manifest + **end-of-shift vehicle reconciliation**. **Split settlement** by liability. Service fee
+> non-refundable by default with authorised override. Full authoritative detail is in **§14** —
+> which **supersedes the Amendment-1 names where they differ**: `delivery_confirmations` /
+> `delivery_confirmation_items` supersede `order_confirmations` / `item_confirmations`; `item_issues`
+> supersedes `item_rejections`; `customer_support_cases` supersedes `support_cases`;
+> `notification_events` supersedes `notifications`. See [`MARKETPLACE-DECISIONS.md`](./MARKETPLACE-DECISIONS.md)
+> §Amendment-2.
+
 ---
 
 ## 1. What already exists (audited baseline)
@@ -60,18 +72,18 @@ Key audit findings that shape this spec:
 | 6 | Customer basket | `baskets`(N), `basket_items`(N) | Customer |
 | 7 | Orders | `market_orders`(E) | Customer |
 | 8 | Merchant fulfilment | `merchant_sub_orders`(N), `market_order_items`(E), `item_events`(N) | Merchant |
-| 9 | Driver logistics | `routes`(N), `collection_tasks`(N), `delivery_tasks`(N) | Driver |
+| 9 | Driver logistics | `routes`(N), `collection_tasks`(N), `delivery_tasks`(N), `route_reconciliations`(N §14), `vehicle_reconciliations`(N §14) | Driver |
 | 10 | Evidence & media | `evidence_media`(N) | All |
 | 11 | Delivery & collection | `delivery_slots`(N) | Ops |
-| 12 | Customer confirmation | `order_confirmations`(N), `item_confirmations`(N) | Customer |
-| 13 | Rejections, returns & refunds | `item_rejections`(N), `item_returns`(N), `refunds`(N) | Customer/Ops |
+| 12 | Customer confirmation | `delivery_confirmations`(§14), `delivery_confirmation_items`(§14) | Customer |
+| 13 | Issues, returns & refunds | `item_issues`(§14), `issue_evidence`(§14), `item_returns`(N), `return_manifests`(§14), `return_manifest_items`(§14), `merchant_return_confirmations`(§14), `refund_decisions`(§14), `refunds`(N), `customer_credits`(§14) | Customer/Support/Ops |
 | 14 | Payments | `market_payment_events`(N), `market_orders`(E) | Platform |
 | 15 | Stripe Connect | `connect_accounts`(N), `merchants`(E) | Merchant/Platform |
-| 16 | Merchant settlements | `merchant_settlements`(N), `merchant_transfers`(N), `settlement_adjustments`(N); `market_payouts`(E, legacy) | Finance |
+| 16 | Merchant settlements | `merchant_settlements`(N), `settlement_holds`(§14), `settlement_adjustments`(N), `merchant_transfers`(N); `market_payouts`(E, legacy) | Finance |
 | 17 | Referrals & acquisition | `referrals`(E), `referral_codes`(N), `location_waitlist`(E), `merchant_suggestions`(E), `merchant_referral_milestones`(N) | Customer |
 | 18 | Rewards | `reward_ledger`(E), `reward_redemptions`(E), `reward_catalogue`(N) | Customer |
-| 19 | Support | `support_cases`(N), `support_messages`(N) | Support |
-| 20 | Notifications | `notifications`(N) | Platform |
+| 19 | Support | `customer_support_cases`(§14), `support_messages`(N) | Support |
+| 20 | Notifications | `notification_events`(§14) | Platform |
 | 21 | Audit & compliance | `audit_events`(N) | Platform |
 | 22 | Geography (hubs) | `launch_areas`(E, = hubs), `user_addresses`(E), `service_zones`(N) | Ops |
 
@@ -471,6 +483,18 @@ column; keep the old enum for back-compat, do not drop).
 | `transfer_status` | `pending, created, paid, failed, reversed` |
 | `waitlist_status` | `pending, invited, activated, opted_out` |
 | `merchant_suggestion_status` | `suggested, duplicate_check, research_pending, contacted, interested, onboarding, approved, active` |
+| `issue_reason` (Amd 2, supersedes `rejection_reason`) | `damaged, wrong_brand, wrong_item, not_fresh, incorrect_quantity, missing, unapproved_substitution, packaging_issue, other` |
+| `delivery_confirmation_status` (Amd 2) | `pending, in_review, accepted, partially_rejected, rejected, closed` |
+| `item_issue_status` (Amd 2) | `raised, notified, under_review, resolved, dismissed` |
+| `refund_eligibility` (Amd 2) | `pending_review, full_refund, partial_refund, no_refund` |
+| `refund_review_status` (Amd 2) | `pending_review, clear_resolved, in_dispute, approved, declined, finalised` |
+| `return_requirement` (Amd 2) | `required, not_required, in_driver_possession, returned_to_merchant, merchant_refused, disposal_authorised` |
+| `liability` (Amd 2) | `merchant, platform_operations, customer, shared, undetermined` |
+| `route_status` (Amd 2) | `planned, active, deliveries_complete, returns_pending, reconciling, closed, exception` |
+| `vehicle_reconciliation_status` (Amd 2) | `pending, in_progress, van_empty_confirmed, discrepancy, closed` |
+| `return_manifest_status` (Amd 2) | `open, in_progress, completed, exceptioned` |
+| `settlement_hold_status` (Amd 2) | `held, released, applied` |
+| `refund_method` (Amd 2) | `original_payment, account_credit, reward_credit` |
 | `reward_redemption_status` | `requested, reserved, fulfilled, cancelled, expired` |
 | `support_case_status` | `open, in_progress, awaiting_customer, resolved, closed` |
 | `address_type` | `home, work, other` |
@@ -887,13 +911,13 @@ Each phase: dependencies · backfill · rollback · verification · security che
 | 0019 | Merchant sub-orders | `merchant_sub_orders`, `merchant_order_status` | 0018 | — | split fan-out | merchant sub RLS |
 | 0020 | Item fulfilment | extend `market_order_items`, `item_fulfilment_status`, `item_events` | 0019 | — | item transitions | merchant/customer scoping |
 | 0021 | Evidence & media | `evidence_media`, `evidence_type`, buckets | 0019 | — | signed URL | immutable, no update policy |
-| 0022 | Driver logistics | `routes`, `collection_tasks`, `delivery_tasks`, task enums | 0019 | — | task assign | driver-assigned RLS |
-| 0023 | Confirmation (3-level) | `order_confirmations`, `item_confirmations`, `customer_confirmation_status` | 0020 | — | order/sub-order/item confirm RPC | owner only |
-| 0024 | Rejections, returns & refunds | `item_rejections`, `item_returns`, `refunds`(scope+fee-override cols), `rejection_reason`/`rejection_status`/`return_status`/`refund_status` | 0023 | — | reject→return→refund; fee-override audited | ops/finance-approve only |
+| 0022 | Driver logistics + reconciliation | `routes`, `collection_tasks`, `delivery_tasks`, `route_reconciliations`, `vehicle_reconciliations`, task/`route_status`/`vehicle_reconciliation_status` enums | 0019 | — | task assign; route-closure gate | driver-assigned RLS |
+| 0023 | Delivery confirmation (driver-present) | `delivery_confirmations`, `delivery_confirmation_items`, `delivery_confirmation_status` | 0020/0022 | — | driver cannot close until reviewed | owner only |
+| 0024 | Issues, returns & refunds | `item_issues`(+`issue_reason`,`refund_eligibility`,`return_requirement`,`liability`), `issue_evidence`, `item_returns`, `return_manifests`, `return_manifest_items`, `merchant_return_confirmations`, `refund_decisions`, `refunds`, `customer_credits`, `item_issue_status`/`refund_review_status`/`return_status`/`refund_method` | 0023 | — | issue→return→refund_decision→refund/credit; fee-override audited | customer I; support/finance approve |
 | 0025 | Payments idempotency | `market_payment_events` | 0018 | — | dup-skip test | service-role only |
-| 0026 | Settlements | `merchant_settlements`, `settlement_adjustments`, `merchant_transfers`, payout/transfer enums | 0024/0025 | — | accepted-only math | finance-only |
+| 0026 | Settlements (split) | `merchant_settlements`(+split cols), `settlement_holds`(+`settlement_hold_status`), `settlement_adjustments`, `merchant_transfers`, payout/transfer enums | 0024/0025 | — | split-settlement + hold-affected-only math | finance-only |
 | 0027 | Referrals, rewards & acquisition | `referral_codes`, extend `referrals`/`reward_ledger`/`reward_redemptions`, `reward_catalogue`, redemption enum; extend `location_waitlist`(hub,`waitlist_status`), extend `merchant_suggestions`(`merchant_suggestion_status`,url/qr/dup), `merchant_referral_milestones` | 0012/0018 | issue codes to existing users; backfill waitlist hub | accrual/redeem; demand=count(active waitlist) | owner read; system write; insert-only public capture |
-| 0028 | Support & notifications | `support_cases`, `support_messages`, `support_case_status`, `notifications` | 0012 | — | case flow | owner+support RLS |
+| 0028 | Support & notifications | `customer_support_cases`, `support_messages`, `support_case_status`, `notification_events` | 0012/0024 | — | case flow; real-time + EOD consolidated notify | owner+support RLS |
 | 0029 | Audit | `audit_events` | 0012 | — | append test | no update/delete |
 | 0030 | RPCs | all SECURITY DEFINER RPCs (pinned search_path incl. `extensions` for PostGIS) | 0011–0029 | — | per-RPC tests | grant to correct roles only |
 | 0031 | Indexes & performance | partial/composite indexes | tables exist | — | EXPLAIN | — |
@@ -922,6 +946,283 @@ Each phase: dependencies · backfill · rollback · verification · security che
 
 ---
 
+## 14. Amendment 2 — delivery confirmation, issues, returns, liability & reconciliation
+
+**Authoritative for the delivery/issue/return/settlement flow. All CONFIRMED.** Supersedes the
+Amendment-1 names noted in the banner.
+
+### 14.1 Core principle — three orthogonal dimensions (never combined)
+
+Every flagged item records **three independent facts**, each its own column/enum. They do **not**
+collapse into one "status":
+
+1. **Refund eligibility** — `refund_eligibility`: `pending_review | full_refund | partial_refund | no_refund`
+2. **Physical return requirement** — `return_requirement`: `required | not_required | in_driver_possession | returned_to_merchant | merchant_refused | disposal_authorised`
+3. **Liability** — `liability`: `merchant | platform_operations | customer | shared | undetermined`
+
+A merchant may be liable while no physical return is required; a return may complete while refund
+is still `pending_review`; liability may be `platform_operations` with `full_refund` and **no**
+merchant deduction. Keeping them separate is what lets settlement, returns and refunds proceed on
+independent clocks.
+
+**Liability → settlement rule (confirmed):**
+- `merchant`: merchant settlement **reduced** by the item value where evidence supports poor
+  quality, lack of freshness, wrong item, wrong brand, incorrect quantity, damage **before**
+  collection, unapproved substitution, or mismatch vs the merchant's pick/pack evidence. **If the
+  merchant refuses the physical return but the customer claim is valid against evidence, the
+  financial deduction still applies** (`merchant_refused` + `liability=merchant`).
+- `platform_operations`: platform bears the refund cost (post-collection / consolidation / transit
+  damage, driver loss, incorrect delivery, platform handling failure). **Merchant payout is NOT
+  reduced** where the merchant fulfilled correctly.
+- `customer`: refund **not guaranteed** (wrong product ordered, changed mind, item matches listing
+  + evidence, no fault). Customer support decides.
+- `shared` / `undetermined`: held for support review; split or resolved case-by-case.
+
+### 14.2 Delivery-time confirmation (driver present)
+
+Confirmation occurs **with the driver present**; the **driver may not close the delivery until the
+customer has reviewed the order**. The customer reviews the full order, each merchant sub-order,
+each item, platform eggs/water, quantities, substitutions, and relevant merchant evidence, and may:
+accept all · accept selected items · reject selected items · reject a merchant sub-order · reject
+the full order. Rejecting one item never forces whole-order rejection.
+
+### 14.3 Table specifications (Amendment 2)
+
+RLS deny-by-default on all; writes via RPC/service-role; **every** row-level state change writes an
+`audit_events` row (audit requirement is universal below unless noted "high-audit" = also
+immutable/append-only).
+
+**`delivery_confirmations`** (supersedes `order_confirmations`)
+- *Purpose:* one customer review session per order at the doorstep, gating driver closure.
+- *Key fields:* `id` PK; `market_order_id` FK U; `delivery_task_id` FK; `user_id` FK; `driver_id` FK;
+  `status delivery_confirmation_status`; `opened_at`, `closed_at`; `driver_present bool default true`.
+- *Constraints:* U `(market_order_id)`; CK `closed_at` only when `status in (accepted,partially_rejected,rejected,closed)`.
+- *Indexes:* `(delivery_task_id)`. *RLS:* customer(own) R/I via RPC; driver(assigned) R; ops R.
+- *Audit:* open + close events; **driver cannot set delivery_task→delivered until this is closed.**
+
+**`delivery_confirmation_items`** (supersedes `item_confirmations`)
+- *Purpose:* per-item accept/reject decision within a confirmation.
+- *Key fields:* `id` PK; `delivery_confirmation_id` FK; `item_id` FK U; `decision` (`accepted|rejected`);
+  `affected_qty int`; `created_at`.
+- *Constraints:* U `(item_id)`. *Indexes:* `(delivery_confirmation_id)`. *RLS:* customer own via RPC.
+
+**`item_issues`** (supersedes `item_rejections`) — the flagged-item record carrying the 3 dimensions.
+- *Purpose:* a problem raised against an item; the spine of refund/return/liability.
+- *Key fields:* `id` PK; `item_id` FK; `sub_order_id` FK; `market_order_id` FK; `merchant_id` FK;
+  `raised_by_user_id`; `reason issue_reason`; `note text`; `affected_qty int`;
+  `refund_eligibility` (default `pending_review`); `return_requirement` (default `required`);
+  `liability` (default `undetermined`); `status item_issue_status`; `support_case_id` FK;
+  `created_at`, `resolved_at`.
+- *Constraints:* CK `affected_qty > 0`. *Indexes:* `(market_order_id)`, `(merchant_id, status)`,
+  `(status)`. *RLS:* customer(own order) R/I via RPC; merchant(own sub) R; support/ops/finance R/U.
+- *Audit:* raise → notify(support+merchant+driver/ops) → review → resolve; every dimension change audited.
+
+**`issue_evidence`** — issue-scoped evidence (uses the immutable `evidence_media` storage model).
+- *Purpose:* customer/driver/merchant images + metadata attached to an issue.
+- *Key fields:* `id` PK; `issue_id` FK; `evidence_media_id` FK (→ immutable object); `uploader_role`;
+  `kind` (`customer_image|driver_condition|merchant_response`); `created_at`.
+- *Constraints:* U `(issue_id, evidence_media_id)`. *Indexes:* `(issue_id)`.
+- *RLS:* insert via RPC by the relevant actor; read by parties to the issue. *Audit:* high-audit,
+  append-only; locks on dispute (via `evidence_media.locked_at`).
+
+**`item_returns`** (kept, extended) — physical return of a rejected good.
+- *Purpose:* track goods going back to the merchant, same-driver same-day.
+- *Key fields:* `id` PK; `issue_id` FK; `item_id` FK; `market_order_id` FK; `target_merchant_id` FK;
+  `manifest_id` FK; `assigned_driver_id` FK; `quantity int`; `return_requirement`(mirror);
+  `status return_status`; `collected_at`, `returned_at`, `return_deadline` (EOD);
+  `financial_adjustment_cents ¢`; `admin_notes`; `created_at`.
+- *Indexes:* `(target_merchant_id, status)`, `(manifest_id)`. *RLS:* driver(assigned)/ops R/U via RPC.
+- *Audit:* each transition; ties to `merchant_return_confirmations`.
+
+**`return_manifests`** — the driver's per-route list of goods to return.
+- *Purpose:* one manifest per route grouping all returns for the day.
+- *Key fields:* `id` PK; `route_id` FK U; `driver_id` FK; `status return_manifest_status`;
+  `opened_at`, `completed_at`. *Constraints:* U `(route_id)`. *RLS:* driver(own)/ops R/U.
+
+**`return_manifest_items`** — line items on a manifest.
+- *Key fields:* `id` PK; `manifest_id` FK; `item_return_id` FK U; `target_merchant_id` FK;
+  `status` (`pending|in_possession|returned|exceptioned`); `sequence int`.
+- *Constraints:* U `(item_return_id)`. *Indexes:* `(manifest_id, target_merchant_id)`.
+
+**`merchant_return_confirmations`** — merchant acknowledges receipt of returned goods.
+- *Key fields:* `id` PK; `item_return_id` FK; `merchant_id` FK; `confirmed_by` (merchant_staff);
+  `outcome` (`received|refused`); `evidence_media_id`; `note`; `created_at`.
+- *Constraints:* U `(item_return_id)`. *RLS:* merchant(own) I via RPC; ops/finance R.
+- *Audit:* `refused` outcome does **not** cancel a valid merchant liability deduction (14.1).
+
+**`route_reconciliations`** — driver route closure gate.
+- *Purpose:* enforce that a route only closes when deliveries + returns + evidence + van are done.
+- *Key fields:* `id` PK; `route_id` FK U; `driver_id` FK; `all_deliveries_done bool`;
+  `all_returns_done_or_exceptioned bool`; `return_evidence_uploaded bool`;
+  `merchant_confirmations_recorded bool`; `status route_status`; `reconciled_at`.
+- *Constraints:* U `(route_id)`; CK route may reach `closed` only when the four booleans are true.
+- *RLS:* driver(own)/ops R/U via RPC. *Audit:* closure event; blocks payout release for the route.
+
+**`vehicle_reconciliations`** — explicit end-of-shift van check.
+- *Purpose:* confirm the van is empty/ready; catch unaccounted items.
+- *Key fields:* `id` PK; `route_id` FK; `driver_id` FK; `status vehicle_reconciliation_status`;
+  `van_empty_confirmed bool`; `discrepancy_note text`; `unaccounted_item_ref uuid`; `checked_at`.
+- *RLS:* driver(own)/ops R/U. *Audit:* `discrepancy` opens an ops case; route cannot be `closed`
+  while a discrepancy is open.
+
+**`customer_support_cases`** (supersedes `support_cases`) — finalises all refunds.
+- *Key fields:* `id` PK; `user_id` FK; `market_order_id` FK; `issue_id` FK (nullable);
+  `sub_order_id` FK (nullable); `type`; `status support_case_status`; `assigned_to` (platform_staff);
+  `is_disputed bool`; `sla_due_at`; `created_at`, `resolved_at`.
+- *Indexes:* `(status)`, `(assigned_to)`. *RLS:* customer(own) R/I; support/ops/finance R/U;
+  merchant(own sub) R limited. *Audit:* all state + assignment changes.
+
+**`refund_decisions`** — support/finance's authoritative ruling on an issue.
+- *Purpose:* the decision that finalises refund eligibility + method + fee treatment.
+- *Key fields:* `id` PK; `issue_id` FK; `support_case_id` FK; `decided_by` (platform_staff);
+  `refund_eligibility`; `refund_method` (`original_payment|account_credit|reward_credit`);
+  `product_value_cents ¢`; `fee_refund_cents ¢ default 0`; `is_fee_override bool default false`;
+  `fee_override_reason text`; `liability`; `status refund_review_status`; `decided_at`.
+- *Constraints:* CK `is_fee_override` requires `fee_override_reason` + `fee_override` actor role ≥
+  `support_staff`/`finance_staff`/`super_admin`. *RLS:* support/finance/super_admin R/U via RPC.
+- *Audit:* high-audit; every fee override writes actor + reason + amount + timestamp + `audit_events`.
+
+**`refunds`** (kept from Amd 1) — the idempotent money-out execution of a `refund_decision`.
+- Links `refund_decision_id`; carries `stripe_refund_id`, `idempotency_key`, `amount_cents`, `status refund_status`.
+
+**`customer_credits`** — non-Stripe reimbursement (distinct from a card refund).
+- *Purpose:* reimburse via account credit or reward credit rather than original payment.
+- *Key fields:* `id` PK; `user_id` FK; `refund_decision_id` FK; `kind` (`account_credit|reward_credit`);
+  `amount_cents ¢` (account) / `points int` (reward); `reward_ledger_id` FK (when reward);
+  `status` (`issued|redeemed|expired`); `created_at`.
+- *RLS:* customer(own) R; finance/system I via RPC. *Audit:* issuance event.
+
+**`settlement_holds`** — per-item/sub-order money held pending issue resolution.
+- *Purpose:* **hold only the affected item/sub-order value — never freeze the whole multi-merchant order.**
+- *Key fields:* `id` PK; `merchant_settlement_id` FK; `sub_order_id` FK; `item_id` FK (nullable);
+  `issue_id` FK; `amount_cents ¢`; `status settlement_hold_status` (`held|released|applied`);
+  `reason`; `created_at`, `resolved_at`.
+- *Indexes:* `(merchant_settlement_id, status)`. *RLS:* finance/ops R/U via RPC.
+- *Audit:* held → released (issue cleared, becomes payable) or applied (becomes a deduction).
+
+**`settlement_adjustments`** (kept) — realised reductions to payout (from applied holds / returns / refunds).
+
+**`merchant_settlements`** (kept, extended) — add `undisputed_payable_cents ¢`, `held_cents ¢`,
+`deducted_cents ¢`, `platform_liability_payable_cents ¢`. Split-settlement math in 14.4.
+
+**`merchant_transfers`** (kept) — Stripe transfer of the finally-eligible amount; idempotent.
+
+**`notification_events`** (supersedes `notifications`) — append-only event stream.
+- *Purpose:* real-time + consolidated notifications to customer/merchant/driver/ops.
+- *Key fields:* `id` PK; `type text` (registry in code); `audience` (`customer|merchant|driver|ops|finance|support`);
+  `user_id` / `merchant_id` / `driver_id` (nullable targets); `market_order_id`, `issue_id`,
+  `sub_order_id` (nullable refs); `payload jsonb`; `channel` (`email|push|in_app`);
+  `sent_at`, `read_at`, `created_at`.
+- *Indexes:* `(audience, created_at)`, `(merchant_id, created_at)`. *RLS:* target reads own.
+- *Audit:* high-audit append-only. Merchant real-time issue notify carries: reason, affected qty,
+  customer evidence (where authorised), driver evidence, expected return, **settlement hold amount**,
+  response deadline. End-of-day: consolidated return + refund list per merchant.
+
+### 14.4 Split-settlement money model (confirmed)
+
+Settlement is computed **per merchant sub-order**, splitting each item by liability + dispute state:
+```
+undisputed_payable = Σ accepted items with no open issue           (payable now)
+held               = Σ items with an OPEN issue (dispute unresolved) (settlement_holds, held)
+deducted           = Σ items where liability=merchant AND issue resolved against merchant
+platform_payable   = Σ items where liability=platform_operations    (merchant still paid; platform bears refund)
+excluded           = Σ cancelled / missing items                    (never in merchant gross)
+
+accepted_gross     = undisputed_payable + platform_payable          (merchant-earned)
+commission_cents   = round(accepted_gross * rate)                   (8% collection / 12% delivery)
+eligible_cents     = accepted_gross − commission − Σ applied deductions
+```
+- **No-issue path:** all items undisputed → `eligible` immediately after final route reconciliation
+  + vehicle reconciliation; a no-issue transfer may be initiated straight away.
+- **Issue path:** open issues → `held` (only the affected value); on resolution the hold is
+  `released` (payable) or `applied` (deduction) → **settlement recalculation → payout reconfirmation**
+  (payout_status `on_hold → recalculating → reconfirmed → eligible`).
+- **Service fee:** retained by default in every refund; refund returns eligible **product value**;
+  a fee refund happens only via `refund_decisions.is_fee_override` (authorised actor + reason +
+  amount + timestamp + audit). Reimbursement method chosen per `refund_method` (card / account
+  credit / reward credit) — the customer-facing payout, independent of the merchant deduction.
+
+### 14.5 The eight confirmed state machines
+
+**Customer delivery-confirmation (`delivery_confirmation_status`)**
+```
+pending → in_review → accepted → closed
+in_review → partially_rejected → closed
+in_review → rejected → closed
+FORBIDDEN: driver closes delivery while status ∈ {pending,in_review};
+           closed → any; accepted → rejected.
+```
+
+**Item issue (`item_issue_status`)**
+```
+raised → notified → under_review → resolved
+under_review → dismissed                       (customer-responsibility / no fault)
+FORBIDDEN: resolved → raised; skipping notified (merchant + support must be notified);
+           resolve while return_requirement ∈ {required,in_driver_possession} unless disposal_authorised/merchant_refused.
+```
+
+**Item return (`return_status`, with `return_requirement` dimension)**
+```
+return_requested → return_approved → return_assigned → collected_from_customer
+  → returned_to_merchant → return_confirmed → financially_reconciled
+return_requested → return_rejected              (not required / customer liability)
+return_approved  → (return_requirement=disposal_authorised) → financially_reconciled  (no physical return)
+returned goods, merchant refuses → return_requirement=merchant_refused → financially_reconciled
+   (merchant deduction still applies if liability=merchant)
+FORBIDDEN: financially_reconciled → any; return_confirmed without merchant_return_confirmations.
+```
+
+**Refund-review (`refund_review_status`)**
+```
+pending_review → clear_resolved → approved → finalised     (clear case, fast)
+pending_review → in_dispute → approved → finalised          (2–3 day evidence review)
+in_dispute → declined → finalised
+FORBIDDEN: finalised → any; approve without a refund_decisions row; approve fee override without authorised actor.
+```
+
+**Merchant settlement (`payout_status`)**
+```
+pending → eligible → processing → paid
+eligible → on_hold → recalculating → reconfirmed → eligible   (any open/closed issue)
+processing → failed → processing
+paid → reversed
+FORBIDDEN: pending → paid; eligible → paid while any settlement_hold is 'held';
+           release funds before route_reconciliation + vehicle_reconciliation done.
+```
+
+**Merchant transfer (`transfer_status`)**
+```
+pending → created → paid
+created → failed → created                       (retry, same idempotency_key)
+paid → reversed                                  (post-payout clawback, flagged)
+FORBIDDEN: paid → created; transfer before payout_status=eligible.
+```
+
+**Driver route (`route_status`)**
+```
+planned → active → deliveries_complete → returns_pending → reconciling → closed
+reconciling → exception                          (open discrepancy / incomplete return)
+exception → reconciling                          (resolved)
+FORBIDDEN: active → closed (must pass reconciling); closed while any return_manifest_item ∈
+           {pending,in_possession} without exception; closed while vehicle_reconciliation ≠ van_empty_confirmed.
+```
+
+**Vehicle reconciliation (`vehicle_reconciliation_status`)**
+```
+pending → in_progress → van_empty_confirmed → closed
+in_progress → discrepancy → (resolve) → van_empty_confirmed → closed
+FORBIDDEN: closed while discrepancy open; route closes before van_empty_confirmed.
+```
+
+### 14.6 Driver route closure gate (confirmed)
+
+A route reaches `closed` **only** when: all deliveries completed · all returns completed or formally
+exceptioned · return evidence uploaded · merchant return confirmations recorded · **vehicle
+reconciliation = `van_empty_confirmed`**. No-issue merchant transfers may initiate immediately after
+this reconciliation; issue orders follow the hold → resolve → recalc → reconfirm path.
+
+---
+
 *This is the canonical technical contract. Operations narrative → `MARKETPLACE-OPERATIONS.md`;
-50 stress-tests → `MARKETPLACE-SCENARIOS.md`; open decisions/contradictions →
+stress-tests → `MARKETPLACE-SCENARIOS.md`; open decisions/contradictions →
 `MARKETPLACE-DECISIONS.md`. No code until these are reviewed and approved.*

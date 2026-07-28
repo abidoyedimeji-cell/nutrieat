@@ -70,6 +70,66 @@ Everything else has a safe documented default and does not block starting Level 
 
 ---
 
+## Amendment 2 (2026-07-28) — change summary
+
+**Closed decisions (all now CONFIRMED, C34–C45):**
+- **Confirmation is driver-present** — driver cannot close delivery until the customer reviews the
+  order (order / sub-order / item / eggs+water / quantities / substitutions / evidence).
+- **Three orthogonal dimensions never combined:** `refund_eligibility`, `return_requirement`,
+  `liability` — each its own enum/column.
+- **Issue reasons** expanded to a 9-value `issue_reason` enum (+ note, image, affected qty) with
+  immediate notify to support + merchant + driver/ops.
+- **Same-driver same-day returns** with a `return_manifests` + `merchant_return_confirmations`
+  chain; **explicit end-of-shift vehicle reconciliation**; formal driver route-closure gate.
+- **Liability rules:** merchant deduction on merchant-fault (even if the merchant refuses the
+  physical return, a valid evidenced claim still deducts); platform bears platform-caused damage
+  with **no** merchant deduction; customer-fault refunds not guaranteed (support decides).
+- **All refunds finalised by customer support** (clear = fast; disputed = 2–3 days).
+- **Split settlement:** undisputed-payable / merchant-liability-deducted / open-disputed-held /
+  platform-liability-payable / cancelled-missing-excluded. **Hold only the affected item/sub-order
+  value — never freeze a whole multi-merchant order.**
+- **Payout timing:** no-issue orders payable immediately after final route + vehicle reconciliation;
+  issue orders follow hold → resolve → recalculate → reconfirm.
+- **Service fee** non-refundable by default; override allowed for support/finance/super_admin with
+  actor + reason + amount + timestamp + audit.
+- **Reimbursement methods distinguished:** original payment / account credit / reward credit.
+
+**Schema (all additive / renames in spec only, no migration yet):** `delivery_confirmations`(+items)
+supersede `order_confirmations`(+items); `item_issues` supersedes `item_rejections` (carries the 3
+dimensions); new `issue_evidence`, `return_manifests`, `return_manifest_items`,
+`merchant_return_confirmations`, `route_reconciliations`, `vehicle_reconciliations`,
+`refund_decisions`, `customer_credits`, `settlement_holds`; `merchant_settlements` +split columns;
+`customer_support_cases` supersedes `support_cases`; `notification_events` supersedes
+`notifications`. New enums: `issue_reason`, `delivery_confirmation_status`, `item_issue_status`,
+`refund_eligibility`, `refund_review_status`, `return_requirement`, `liability`, `route_status`,
+`vehicle_reconciliation_status`, `return_manifest_status`, `settlement_hold_status`, `refund_method`.
+
+**State machines fully defined (8):** delivery-confirmation, item-issue, item-return, refund-review,
+merchant-settlement, merchant-transfer, driver-route, vehicle-reconciliation (allowed + forbidden) —
+architecture §14.5.
+
+**New contradictions/assumptions:**
+- 🟡 **N5 — `issue_reason` supersedes Amd-1 `rejection_reason`.** Two enums described; keep old for
+  back-compat, stop writing it. Also `not_fresh` (Amd 2) vs `expired`/`poor_quality` (Amd 1) —
+  mapped: `not_fresh`≈freshness, `damaged`, `poor_quality`→covered by `not_fresh`/`damaged`; confirm.
+- 🟡 **N6 — route-closure vs payout coupling.** No-issue transfers "immediately after final route
+  reconciliation" — confirm this is per-route (all orders on the route) not per-order timing.
+- 🔴 **N1 still open** (service-fee-component mapping from Amd 1) — Amendment 2 confirms the *rule*
+  (service fee retained, override allowed) but still doesn't name **which** fee = "service fee".
+  Restated as a P0.
+
+**Revised P0 (before implementation):**
+1. 🔴 Resolve `abidoyedimeji` → real Supabase user id + verified email (super_admin seed).
+2. 🔴 Ratify **service-fee-component mapping** (N1) — which of small-order / multi-store / priority
+   is the retained "service fee".
+3. 🔴 Seed **delivery + route zones** for Eltham/Dartford/Erith (Level A gate).
+4. 🔴 **Confirmation window** semantics — note Amd 2 makes confirmation **synchronous (driver
+   present)**, so the "auto-confirm window" now only applies to a *no-show/driver-left* fallback;
+   confirm that fallback window (Q1 reframed).
+5. 🔴 **Stripe Connect enabled** (Level C gate).
+
+---
+
 ## 1. Confirmed decisions (🟢 — locked by founder or codebase)
 
 | # | Decision | Source |
@@ -107,6 +167,18 @@ Everything else has a safe documented default and does not block starting Level 
 | C31 | Refunds scoped (item/multi/sub-order/order), full/partial, manual review/declined/admin override; refunds change item status **and** merchant settlement | Amendment 1 |
 | C32 | **Service fee retained by default** on refund; product value + refundable fulfilment charges refundable; each fee component stored separately; admin may override to refund a fee **only** with authorised actor + reason + amount + timestamp + audit event. Fees are **not** "never refundable" | Amendment 1 |
 | C33 | Delivery alone does **not** release funds; payout lifecycle includes settlement recalculation + **payout reconfirmation** after any delivery-time return/refund; settlement based only on accepted item qty/values | Amendment 1 |
+| C34 | Customer confirmation is **driver-present**; driver may not close the delivery until the customer has reviewed the order | Amendment 2 |
+| C35 | Refund eligibility, physical return requirement, and liability are **three separate dimensions** (never combined) | Amendment 2 |
+| C36 | `issue_reason` set: damaged, wrong_brand, wrong_item, not_fresh, incorrect_quantity, missing, unapproved_substitution, packaging_issue, other; + note + image + affected qty; immediate notify support+merchant+driver/ops | Amendment 2 |
+| C37 | Same-driver same-day returns; return manifest; merchant return confirmation; **end-of-shift vehicle reconciliation**; formal route-closure gate | Amendment 2 |
+| C38 | Merchant settlement reduced on evidenced merchant fault; **merchant refusal of a valid return still deducts**; platform bears platform-caused damage with **no** merchant deduction | Amendment 2 |
+| C39 | Customer-fault refunds not guaranteed; **all refunds finalised by customer support** (clear=fast, disputed=2–3 days) | Amendment 2 |
+| C40 | **Split settlement:** undisputed-payable / merchant-deducted / open-held / platform-payable / cancelled-excluded; **hold only affected item/sub-order — never freeze whole multi-merchant order** | Amendment 2 |
+| C41 | No-issue orders payable immediately after final route + vehicle reconciliation; issue orders hold→resolve→recalc→reconfirm | Amendment 2 |
+| C42 | Service fee non-refundable by default; override for support/finance/super_admin with actor+reason+amount+timestamp+audit | Amendment 2 |
+| C43 | Reimbursement methods distinguished: original_payment / account_credit / reward_credit | Amendment 2 |
+| C44 | Merchant real-time issue notify (reason, qty, evidence, expected return, **settlement hold amount**, response deadline) + EOD consolidated return/refund list | Amendment 2 |
+| C45 | All physical goods same-day-return capable (fruit/meat/eggs/water/etc.) with `not_required`/`disposal_authorised` exceptions preserved | Amendment 2 |
 
 ---
 
