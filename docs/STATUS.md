@@ -16,7 +16,12 @@ for the technical design, [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) for con
 > closed a writer actor-spoofing grant hole, `event_category` classification, and Wave-1A audit
 > enrichment. Convention [`AUDIT-CONVENTION.md`](./AUDIT-CONVENTION.md); retention
 > [`AUDIT-RETENTION.md`](./AUDIT-RETENTION.md).
-> Marketplace backbone continues per the wave plan; **Wave 1C (Money & ledger) awaits review**.
+>
+> **Platform Wave 1C (Money & Ledger Foundation) — ✅ COMPLETE** (migration 0017, applied + gated).
+> Append-only, idempotent double-entry cash ledger (`financial_accounts`/`journals`/`postings`, pence
+> GBP), balance-enforced + reconcilable, internal-only writer, finance-gated reads; **points stay in
+> `reward_ledger`, never mixed with cash**. Money model in [`MONEY-MODEL.md`](./MONEY-MODEL.md).
+> Marketplace backbone continues per the wave plan; **Wave 1D (Notifications) awaits review**.
 
 ## Overall: ~55% — execution underway
 
