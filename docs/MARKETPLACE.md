@@ -15,17 +15,20 @@ hard part is **supply, marketplace payouts and logistics**, not the app.
 
 ---
 
-## 1. Sequencing recommendation (read first)
+## 1. Sequencing (locked by founder)
 
-**Launch the cookbook first. Build the Farmers Market as the next initiative.** The cookbook
-is days from revenue and gated only on non-code items (distributor, legal, PDF upload). The
-marketplace is gated on **real local suppliers signing up**, which is a business-development
-effort with a long lead time. Starting supplier outreach *now, in parallel* is the highest-
-leverage move — the code can follow the supply.
+**Build the merchant-onboarding + Stripe payout rails BEFORE the cookbook launch.** The
+founder wants to onboard real merchants in **Dartford, Erith and Eltham** ahead of launch, so
+the marketplace foundation (merchant accounts, inventory ingestion, Stripe Connect payouts,
+merchant/location waitlist referrals) comes **first / in parallel**, not after.
 
-The phased plan below (Level A → B → C) lets us ship value at each step without waiting for
-the whole marketplace, and without taking payment liability until suppliers and logistics are
-real.
+Rationale: onboarding merchants and clearing Stripe Connect KYC has a long lead time, so
+starting it now — while cookbook content/legal is finished — is the highest-leverage move. The
+cookbook funnel is already live and can keep collecting pre-orders in parallel.
+
+The phased plan (§8) still stages *customer-facing* launch (discovery → ordering → payouts) so
+we don't take payment/logistics liability before merchants and drivers are real — but the
+**onboarding + Connect setup runs pre-launch**.
 
 ---
 
@@ -51,14 +54,31 @@ compliance (KYC/payouts via Connect), and delivery/collection logistics. Build a
 
 ---
 
-## 3. Suppliers, products & fulfilment (locked from spec)
+## 3. Suppliers, inventory, logistics & launch areas (locked)
 
 - **Name:** The Farmers Market.
+- **Launch areas:** onboard merchants in **Dartford, Erith and Eltham** first. Customers are
+  matched to merchants within a **5-mile radius**, but launch is gated to these towns until we
+  have supply density.
 - **Initial supply:** 3 local butchers / meat suppliers; farm eggs (packs of **30 or 40**);
   Hildon mineral water (cases of **12 × 1L**).
-- **Delivery-only lines:** eggs + water (**no collection**). Merchant meat can be collection
-  or delivery.
-- **Radius:** each user is matched to suppliers within **5 miles** of their address.
+
+### Two inventory types
+1. **Merchant-consigned** (butchers/meat): each merchant provides a **stock list**; we ingest
+   the fields we need from their list (name, unit, price, availability) into `market_products`.
+   We do **not** hold this stock — the merchant does.
+2. **Platform-owned** (eggs + water): **we hold and manage this inventory ourselves.** Tracked
+   with real stock counts. Eggs + water are **delivery-only** (no collection).
+
+### Logistics (locked)
+- **Our own drivers** collect orders from the **local merchant store** and fulfil them.
+- **Operating / pickup window: 04:00–11:00.** Driver runs happen in this window; scheduled
+  delivery slots are built around it.
+- Standard delivery requires **≥2 days** advance (per spec §16).
+
+> Modelling consequence: fulfilment is **driver-collected**, so "collection" in the fee table
+> means *the customer* collects from the merchant; the delivery path is *our driver* collecting
+> from the merchant and delivering to the customer.
 
 ### Fulfilment methods
 
@@ -134,7 +154,19 @@ launch date.**
 - **FM rewards = cooperative-membership style:** product / service / experience rewards.
   Points do **not** carry a fixed cash value; any discount is **capped**.
 
-### 5c. Gamified milestones
+### 5c. Merchant & location referrals (new — locked)
+
+Beyond customer-to-customer referral, customers can **grow supply**:
+- **Refer a merchant:** a customer nominates a local butcher / farm / supplier. Tracked in
+  `merchant_referrals`; rewarded (points) when that merchant onboards + goes live.
+- **Location waitlist:** a customer requests / **votes for their town** to be added. Tracked in
+  `location_waitlist`. Demand signal that tells us where to onboard merchants next (after
+  Dartford / Erith / Eltham).
+
+This makes acquisition two-sided: customers pull both **buyers** (5% cashback / points) and
+**suppliers/locations** (merchant + location referrals) into the network.
+
+### 5d. Gamified milestones
 
 - **Referral milestones:** 1 / 5 / 10 / 25 referrals.
 - **Referral-network milestones:** 50 / 200 completed orders across your network.
@@ -151,23 +183,33 @@ Enable PostGIS first (`create extension if not exists postgis`). New tables (all
 deny-by-default, same as cookbook):
 
 ```
-suppliers            id, name, slug, status, commission_default,
-                     location geography(Point,4326), collection_enabled, delivery_enabled,
-                     stripe_connect_account_id, contact_email, ...
-supplier_zones       supplier_id, ... (optional finer service-area polygons)
-market_products      id, supplier_id, name, slug, unit_label (e.g. "pack of 30",
-                     "case of 12×1L"), price_cents, currency, delivery_only bool,
-                     in_stock, image_url, category
+launch_areas         id, name (Dartford|Erith|Eltham|…), slug, is_live,
+                     centroid geography(Point,4326)
+merchants            id, name, slug, status (pending|active|paused), launch_area_id,
+                     supply_type ('merchant'), commission_default,
+                     address, postcode, location geography(Point,4326),
+                     collection_enabled, delivery_enabled,
+                     stripe_connect_account_id, connect_status, contact_email,
+                     pickup_window_start (04:00), pickup_window_end (11:00)
+merchant_stock_imports  id, merchant_id, source_filename, raw jsonb, status, imported_at
+market_products      id, merchant_id (null = platform-owned), name, slug,
+                     unit_label ("pack of 30", "case of 12×1L"),
+                     price_cents, currency, supply_type ('merchant'|'platform'),
+                     delivery_only bool, image_url, category
+platform_inventory   market_product_id, stock_count, reorder_level   -- eggs + water only
 user_addresses       user_id, line1, postcode, location geography(Point,4326), is_default
 market_orders        id, user_id, status, fulfilment_method (collection|standard|priority),
-                     scheduled_for, window, subtotal_cents, small_order_fee_cents,
+                     scheduled_for, delivery_window, subtotal_cents, small_order_fee_cents,
                      priority_fee_cents, multistore_fee_cents, total_cents, currency
-market_order_items   order_id, supplier_id, market_product_id, qty, unit_price_cents,
-                     line_total_cents
-market_payouts       order_id, supplier_id, merchant_subtotal_cents,
+market_order_items   order_id, merchant_id (null=platform), market_product_id, qty,
+                     unit_price_cents, line_total_cents
+market_payouts       order_id, merchant_id, merchant_subtotal_cents,
                      commission_cents, payout_cents, connect_transfer_id, status
 referrals            referrer_user_id, referred_user_id, code, regime (cashback|points),
                      qualifying_event, status (pending|qualified|paid|void)
+merchant_referrals   referrer_user_id, merchant_name, contact, town, status
+                     (submitted|contacted|onboarded|declined)
+location_waitlist    user_id (nullable), email, town, postcode, votes, created_at
 reward_ledger        user_id, kind (cashback|points), delta, balance_after, reason,
                      source_ref, created_at
 reward_redemptions   user_id, kind, amount, redeemed_as (cookbook|fm_transfer|fm_discount),
@@ -207,27 +249,34 @@ This is the single biggest new compliance surface. It **cannot** be faked — do
 
 ---
 
-## 8. Phased MVP (recommended build order)
+## 8. Phased build order (pre-launch onboarding first)
 
-### Level A — Local discovery within 5 miles *(buildable now, no payments)*
-- Supplier + product catalogue (admin-entered), `user_addresses` with geocoded postcode,
-  PostGIS radius query, `/market` browse gated to logged-in users, "suppliers near you".
-- **Ship value with zero payment/logistics risk.** Also validates: are there enough suppliers
-  in a 5-mile radius to matter? Proves demand before we take money.
+### Phase 0 — Foundation + onboarding rails *(NOW, pre-cookbook-launch)*
+- PostGIS enabled; schema for `launch_areas`, `merchants`, `market_products`,
+  `platform_inventory`, `user_addresses`, referrals/waitlist/reward ledger (migration
+  `0010`). Deny-by-default RLS.
+- **Merchant onboarding console** (admin): create merchant, ingest their **stock list** into
+  `market_products`, set commission, mark active.
+- **Stripe Connect** (Express) onboarding link per merchant + `account.updated` webhook →
+  `connect_status`. *(Needs Connect enabled on the Stripe account — a dashboard step.)*
+- **Merchant + location referral / waitlist** public capture (customers refer merchants & vote
+  towns) — this is live-now demand-gen for Dartford / Erith / Eltham.
+- **§5a cashback** ledger (ships with the cookbook — only needs a completed pre-order).
 
-### Level B — Reserve / pre-order for collection
-- Cart, £40 minimum, small-order-fee logic, **collection only**, reserve-and-pay-on-pickup
-  or simple upfront charge to the platform account (no Connect yet). Supplier gets an order
-  email. Real transactions, contained blast radius.
+### Phase A — Local discovery within 5 miles *(no buyer payments)*
+- `/market` gated to logged-in users; geocoded address; PostGIS radius query; browse merchants
+  + products near you, gated to live launch areas.
 
-### Level C — Full marketplace
-- **Stripe Connect** payouts, standard + priority **delivery**, multi-store orders, the full
-  commission/fee engine (§4), delivery scheduling (≥2 days), and the **referral/rewards
-  ledger** (§5). This is the "real app."
+### Phase B — Ordering (collection + our-driver delivery)
+- Cart, £40 minimum, small-order-fee, priority/multi-store fees, ≥2-day scheduling around the
+  **04:00–11:00 driver window**. Charge upfront to the platform account.
 
-Referral note: **§5a cashback can ship with the cookbook** (it only needs the cookbook
-pre-order + an account reward balance) — it does not wait for Level C. **§5b points** wait for
-Level C because they depend on FM orders existing.
+### Phase C — Full marketplace payouts
+- **Stripe Connect transfers** (commission 8%/12%, per-merchant payouts, multi-store),
+  platform-owned egg/water inventory decrement, and **§5b post-launch points**.
+
+Referral note: **§5a cashback ships in Phase 0** (needs only a paid cookbook pre-order + reward
+balance). **§5b points** wait for Phase C (they depend on completed FM orders).
 
 ---
 

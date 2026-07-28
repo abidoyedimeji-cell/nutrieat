@@ -103,3 +103,11 @@ join (values
 ) as v(variant_type, sku, price_cents, inv) on true
 where p.slug = 'cookbook'
 on conflict (sku) do nothing;
+
+-- ---------------------------------------------------------- Farmers Market launch areas (Phase 0)
+-- Dartford, Erith, Eltham. Not live until merchants onboarded. Centroids for radius matching.
+insert into launch_areas (name, slug, is_live, centroid) values
+  ('Dartford', 'dartford', false, extensions.st_setsrid(extensions.st_makepoint(0.2196, 51.4462), 4326)::geography),
+  ('Erith',    'erith',    false, extensions.st_setsrid(extensions.st_makepoint(0.1780, 51.4816), 4326)::geography),
+  ('Eltham',   'eltham',   false, extensions.st_setsrid(extensions.st_makepoint(0.0524, 51.4515), 4326)::geography)
+on conflict (slug) do nothing;

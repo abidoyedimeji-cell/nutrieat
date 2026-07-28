@@ -4,6 +4,45 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## The Farmers Market — Phase 0 foundation ✅ (schema + geo + rewards rails)
+**Status:** migration `0010` applied to live Supabase · RLS verified via advisors
+
+New local-marketplace surface, built **before** cookbook launch (founder decision) so merchants
+in **Dartford / Erith / Eltham** can be onboarded ahead of time. Plan: [`MARKETPLACE.md`](./MARKETPLACE.md).
+
+**Schema (`0010_marketplace_foundation.sql`)** — PostGIS enabled (`extensions` schema); 14 new
+tables: `launch_areas`, `merchants`, `merchant_stock_imports`, `market_products`,
+`platform_inventory`, `user_addresses`, `market_orders`, `market_order_items`, `market_payouts`,
+`referrals`, `merchant_referrals`, `location_waitlist`, `reward_ledger`, `reward_redemptions`.
+Money in integer pence + `currency='GBP'`. `geography(Point,4326)` + GiST indexes for the
+5-mile radius match. Enums for merchant/connect/order status, fulfilment method, supply type,
+referral regime/status, reward kind.
+
+**Key modelling decisions (locked from founder):**
+- **Two supply types** — `merchant` (butchers; consigned, ingested from their stock list) and
+  `platform` (eggs + water; we hold stock in `platform_inventory`, delivery-only).
+- **Driver-collected logistics**, pickup window **04:00–11:00** (`merchants.pickup_window_*`).
+- **Reward ledger separates `cashback` (pence) from `points` (non-cash)** via a `kind`
+  discriminator — never mixed in one balance (pre-launch 5% cashback vs post-launch points).
+- **Two-sided acquisition** — `merchant_referrals` (refer a supplier) + `location_waitlist`
+  (vote your town) alongside customer→customer `referrals`.
+
+**Security** — deny-by-default RLS on all 14. Public read only on `launch_areas` (live),
+`merchants` (active), `market_products` (available + active/platform). Owner-only on addresses,
+orders, referrals, rewards. Public **insert-only** capture on `location_waitlist` +
+`merchant_referrals`. Admin/service-role-only (no policy) on stock imports, platform inventory,
+payouts. Revoked anon grants on owner-only tables (matches `0006` hardening). Advisors: no
+private table exposed to anon; remaining WARNs are the benign RLS-protected-GraphQL-exposure
+class (same as cookbook) + intentional insert-only waitlist policy.
+
+**Seed** — 3 launch areas (Dartford/Erith/Eltham) with centroids, `is_live=false` until
+merchants onboard.
+
+**Next** — merchant onboarding console (admin), Stripe Connect onboarding link + `account.updated`
+webhook, public merchant-referral/location-waitlist capture form. Then Phase A discovery.
+
+---
+
 ## Grocery / Shopping Assistant — Level 1–2 ✅
 **Status:** complete · typecheck + tests + build pass · DB verified
 
