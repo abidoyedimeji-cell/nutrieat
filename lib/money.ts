@@ -52,6 +52,29 @@ export const FINANCIAL_ACCOUNT_KINDS = [
 ] as const;
 export type FinancialAccountKind = (typeof FINANCIAL_ACCOUNT_KINDS)[number];
 
+// ── Commission vs platform fee (distinct concepts — never conflate) ──────────────────────────────
+// COMMISSION = a percentage deducted from the merchant's eligible gross (their share shrinks by it).
+// PLATFORM FEE revenue = separate flat service charges (small-order / multi-store / priority-window);
+// it is NOT a percentage of merchant gross. The two hit different revenue accounts on the ledger
+// (platform_commission_revenue vs platform_fee_revenue).
+//
+// Farmers Market scheduled-delivery commission is LOCKED at 12% (1200 basis points).
+export const FARMERS_MARKET_COMMISSION_BPS = 1200; // 12.00%
+
+/** Split a merchant's eligible gross (integer pence) at a commission rate in basis points.
+ *  Commission rounds to whole pence (banker-free floor+remainder) so merchant + commission === gross
+ *  with no lost/created pence. Returns integer pence. */
+export function commissionSplit(
+  grossCents: number,
+  commissionBps: number = FARMERS_MARKET_COMMISSION_BPS,
+): { merchantCents: number; commissionCents: number } {
+  if (!Number.isInteger(grossCents) || grossCents < 0) throw new Error("gross must be a non-negative integer pence");
+  if (!Number.isInteger(commissionBps) || commissionBps < 0 || commissionBps > 10000) throw new Error("commissionBps must be 0..10000");
+  const commissionCents = Math.round((grossCents * commissionBps) / 10000);
+  const merchantCents = grossCents - commissionCents; // exact reconciliation: no pence created or lost
+  return { merchantCents, commissionCents };
+}
+
 // Value-system tag. Cashback is CASH-valued (pence, ledger); points are NON-CASH (reward_ledger).
 export type ValueSystem = "cash" | "points";
 export function valueSystemForRewardKind(kind: "cashback" | "points"): ValueSystem {
