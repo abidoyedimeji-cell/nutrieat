@@ -22,11 +22,15 @@ ends and Farmers-Market-specific logic begins (ADR `README`).
 Each wave is one coherent concept, its own migration(s), its own gate. **No wave advances because
 code compiles — it advances when its gate passes** (see §5 stage gates).
 
-### Wave 1A — Identity & organisations
+### Wave 1A — Identity & organisations ✅ COMPLETE (migrations 0011–0013)
 Build: platform roles · `platform_staff` memberships · merchant organisations · merchant stores ·
 `merchant_staff` memberships · `drivers` · role assignment/revocation · **super-admin bootstrap to the
 real Supabase user for `abidoyedimeji`** · cross-merchant isolation helpers.
-**Gate:** Merchant A cannot query Merchant B's private data — even with direct API requests.
+**Gate — PASSED:** Merchant A cannot query Merchant B's private data even with a simulated JWT
+(proved: sees 1 own / 0 other); anon denied by grants; no direct writes; no role self-escalation;
+bootstrap idempotent; invite-on-auth attaches to the real `auth.users.id`. Details in
+`BUILDLOG.md` and `supabase/tests/wave1a_verification.sql`. **Do not begin Wave 1B automatically —
+awaiting review.**
 
 ### Wave 1B — Audit & immutable events
 Build: `audit_events` (actor identity · entity type/id · action · before/after summary · correlation
@@ -44,10 +48,14 @@ merchant transfer · Stripe fee · cashback · points. Cash-valued entries and n
 platform revenue.
 
 ### Wave 1D — Notification service
-Build a reusable **event → notification** layer: `notification_events` (recipient · channel ·
-template · payload · status · attempts · idempotency key · scheduled time · sent time · failure
-reason). Business logic **emits an event** (e.g. `merchant_order_ready`); it never contains
-Resend-specific sending logic scattered everywhere.
+Build a reusable **event → notification** layer as **two additive tables** (Wave 1A already shipped
+the `notification_outbox` stub — extend, never rename/drop):
+- **`notification_events`** — the canonical business notification/event record (recipient · channel ·
+  template · payload · idempotency key · created time).
+- **`notification_outbox`** — the channel **delivery queue + retry state** (status · attempts ·
+  scheduled time · sent time · failure reason).
+Business logic **emits an event** (e.g. `merchant_order_ready`); it never contains Resend-specific
+sending logic scattered everywhere.
 **Gate:** replaying an event does not send duplicate customer/merchant messages.
 
 ### Wave 1E — Payment idempotency

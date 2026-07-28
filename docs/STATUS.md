@@ -4,6 +4,12 @@ Living status snapshot. Planning is near-complete; the work ahead is execution.
 See [`ROADMAP.md`](./ROADMAP.md) for scope/phases/decisions, [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 for the technical design, [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) for content.
 
+> **Platform Wave 1A (Identity & Organisations) — ✅ COMPLETE** (migrations 0011–0013, applied +
+> gated). Database-backed roles (`platform_staff`/`merchant_staff`/`drivers`) now exist, replacing
+> sole reliance on `ADMIN_EMAILS`; super-admin bootstrapped to real `auth.users.id`; cross-merchant
+> isolation proven. See [`PLATFORM-EXECUTION-PLAN.md`](./PLATFORM-EXECUTION-PLAN.md) + `BUILDLOG.md`.
+> Marketplace backbone continues per the wave plan; **Wave 1B (Audit) awaits review**.
+
 ## Overall: ~55% — execution underway
 
 The project has moved beyond planning into execution.

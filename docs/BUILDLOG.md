@@ -4,6 +4,60 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Platform Wave 1A — Identity & Organisations ✅
+**Status:** migrations `0011`–`0013` applied to live Supabase · all four gates passed · typecheck + 11/11 tests + `next build` pass
+
+First platform-backbone wave: **database-backed roles replacing the temporary `ADMIN_EMAILS`
+allowlist** (ADR 0009). Governed by `PLATFORM-EXECUTION-PLAN.md` §Wave 1A and `PLATFORM-CONTRACTS.md`.
+
+**PR1 — schema (`0011`):** enums `platform_role`, `merchant_staff_role`, `staff_status`,
+`driver_status`, `invite_status`. Tables `platform_staff`, `platform_staff_invites`,
+`merchant_organisations`, `merchant_staff`, `merchant_staff_invites`, `drivers`, plus a
+Wave-1B-compatible `audit_events` stub and a Wave-1D `notification_outbox` stub. Additive
+`merchants.merchant_organisation_id` (nullable). Partial-unique indexes enforce **one active
+platform_staff per user** and **one active merchant_staff per (merchant,user)** — a user may be
+active at several merchants.
+
+**PR2 — helpers + RLS (`0012`):** SECURITY DEFINER role helpers (`current_platform_role`,
+`is_platform_staff`, `is_super_admin`, `is_platform_admin_or_super`, `is_merchant_staff`,
+`is_driver`) — definer so RLS policies calling them **don't recurse**. Deny-by-default RLS: self +
+admin reads on platform tables; **cross-merchant isolation** via the `merchant_staff` join; anon
+grants revoked; authenticated has select-only (no direct writes).
+
+**PR3 — operations (`0013`):** bootstrap + idempotent RPCs (`bootstrap_platform_staff`,
+`accept_pending_invites`, `invite_platform_staff`, `change_platform_role`,
+`set_platform_staff_status`, `invite_merchant_staff`, `set_merchant_staff_status`, `create_driver`,
+`set_driver_status`) — server-side only, each audited to `audit_events` and notified via
+`notification_outbox` (no Resend in DB transactions). App: `lib/authz-roles.ts` (pure, tested),
+`lib/authz.ts` (server), and `accept_pending_invites` wired into the **shared auth callback**
+(`app/auth/callback`) so it runs on **every** authenticated sign-in — marketplace merchants/drivers/
+staff never need to visit `/account`; failure is logged and never corrupts the session; the
+`/account` call remains an optional idempotent fallback.
+
+**Notification model (terminology, for Wave 1D):** `notification_outbox` here is a **transport/
+delivery queue stub** (channel dispatch + retry state) — **not** the canonical notification history.
+Wave 1D adds/completes, additively (no rename/drop of the live table): **`notification_events`** =
+canonical business notification/event record; **`notification_outbox`** = channel delivery queue +
+retry state. Identity operations currently enqueue to the outbox stub as a clean seam.
+
+**Bootstrap result (both approved emails):** `abidoyedimeji@gmail.com` **exists** → seeded
+`super_admin` directly; `info@oladimejisultan.org` **absent** → pending `platform_admin` invite,
+which attaches to its real `auth.users.id` on first authenticated sign-in. Resolves to
+`auth.users.id`, never a display name; rerunnable with no duplicates.
+
+**Gates (all passed, verified on live DB):** migrations apply; bootstrap correct + idempotent;
+anon denied (grants) + no direct writes; **cross-merchant isolation proven** (Merchant A admin sees
+1 own / 0 other); customer sees 0 staff rows; **no self-escalation** (platform_admin→super_admin
+blocked, self-escalate blocked, invite-lower allowed, super_admin invite allowed); invite
+acceptance idempotent; role changes recorded in `audit_events`. Verification SQL:
+`supabase/tests/wave1a_verification.sql`.
+
+**Notes:** `ADMIN_EMAILS` retained only as a bootstrap fallback (ADR 0009) — the cookbook CMS still
+reads it; migrating CMS auth to `platform_staff` is a later, non-blocking step. No cookbook flows
+changed except the one additive post-login `accept_pending_invites` call.
+
+---
+
 ## The Farmers Market — Phase 0 foundation ✅ (schema + geo + rewards rails)
 **Status:** migration `0010` applied to live Supabase · RLS verified via advisors
 
