@@ -7,8 +7,13 @@ for the technical design, [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) for con
 > **Platform Wave 1A (Identity & Organisations) — ✅ COMPLETE** (migrations 0011–0013, applied +
 > gated). Database-backed roles (`platform_staff`/`merchant_staff`/`drivers`) now exist, replacing
 > sole reliance on `ADMIN_EMAILS`; super-admin bootstrapped to real `auth.users.id`; cross-merchant
-> isolation proven. See [`PLATFORM-EXECUTION-PLAN.md`](./PLATFORM-EXECUTION-PLAN.md) + `BUILDLOG.md`.
-> Marketplace backbone continues per the wave plan; **Wave 1B (Audit) awaits review**.
+> isolation proven.
+>
+> **Platform Wave 1B (Audit & Immutable Events) — ✅ COMPLETE** (migrations 0014–0015, applied +
+> gated). Canonical append-only audit service: one writer (`record_audit_event`), defence-in-depth
+> immutability (UPDATE/DELETE/TRUNCATE blocked for all roles), attributable + idempotent, secret/
+> oversize-rejecting. Convention in [`AUDIT-CONVENTION.md`](./AUDIT-CONVENTION.md).
+> Marketplace backbone continues per the wave plan; **Wave 1C (Money & ledger) awaits review**.
 
 ## Overall: ~55% — execution underway
 

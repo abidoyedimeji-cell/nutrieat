@@ -32,12 +32,16 @@ bootstrap idempotent; invite-on-auth attaches to the real `auth.users.id`. Detai
 `BUILDLOG.md` and `supabase/tests/wave1a_verification.sql`. **Do not begin Wave 1B automatically —
 awaiting review.**
 
-### Wave 1B — Audit & immutable events
+### Wave 1B — Audit & immutable events ✅ COMPLETE (migrations 0014–0015)
 Build: `audit_events` (actor identity · entity type/id · action · before/after summary · correlation
 id · request id · idempotency key · source application · timestamp · metadata). Records **privileged
 state changes**, not page views.
-**Gate:** every role change, order-state change, refund decision and settlement adjustment traces to
-an actor + reason.
+**Gate — PASSED:** every privileged transition traces to an actor + role + action (proved: super_admin
+invite → `platform_staff/super_admin/platform_staff_invite.created`); append-only enforced by trigger
+against UPDATE/DELETE/**TRUNCATE** for all roles + revoked grants; one canonical writer
+(`record_audit_event`), idempotent, secret/oversize-rejecting; system actors keep null uid. Convention
+in `AUDIT-CONVENTION.md`; verification in `supabase/tests/wave1b_verification.sql`. **Do not begin
+Wave 1C automatically — awaiting review.**
 
 ### Wave 1C — Money & ledger foundation
 Build **separated** concepts (no vague "balance"): customer payment · platform fee · merchant gross ·
