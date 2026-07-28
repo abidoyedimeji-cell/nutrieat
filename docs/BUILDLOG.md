@@ -4,6 +4,42 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Platform Wave 1C — Money & Ledger Foundation ✅
+**Status:** migration `0017` applied to live Supabase · all gates passed · typecheck + tests + build pass
+
+Reusable, append-only, idempotent **double-entry** financial ledger for **cash-valued** movements
+only (integer pence, GBP). **Points stay in `reward_ledger`** — never posted to the cash ledger,
+summed with cash, or implicitly converted. Sits **alongside** the order tables (does not turn them
+into accounting tables). Money model: `docs/MONEY-MODEL.md`.
+
+**Preflight (mandatory Wave-1B checks):** integration deployment READY; **root-caused the
+default-privilege issue** — Supabase `ALTER DEFAULT PRIVILEGES` (for `postgres` + `supabase_admin`)
+grants EXECUTE on every new `public` function to PUBLIC/anon/authenticated/service_role, so
+`revoke from public` is insufficient. Chose **explicit revokes + an automated guard** over altering
+Supabase defaults. 0011–0016 aligned repo↔ledger; branch clean.
+
+**PR A — ledger (`0017`):** `financial_accounts` (owner_type/kind/currency/product_scope, unique
+natural identity; platform singletons seeded, per-owner on demand via
+`_get_or_create_financial_account`), `financial_journals` (immutable header: product_context,
+operation_type, source entity, correlation/operation/request ids, idempotency_key, reversal + audit
+links), `financial_postings` (immutable lines, positive pence, debit/credit). **Balance guaranteed
+twice** — the posting RPC + a **deferred constraint trigger** (`debits=credits`, ≥2 lines).
+Append-only via update/delete/truncate triggers. `post_financial_journal()` is the **only write
+path** — SECURITY DEFINER, internal-only, idempotent, audits (finance category) in the same txn.
+Reconciliation: `get_financial_account_balances()`, `get_ledger_totals()` (finance/admin-gated).
+RLS deny-by-default; finance/admin read only.
+
+**PR B — docs + tests:** `docs/MONEY-MODEL.md`, `lib/money.ts` (pure double-entry balance +
+value-system separation) + tests, doc updates.
+
+**Gates (verified live):** **£100 order reconciled exactly** (charge 10000 = merchant 8000 +
+platform fee 2000; net 1800 residual after £2 Stripe fee; merchant_payable nets to 0); unbalanced
+journal **rejected**; UPDATE/DELETE/TRUNCATE **blocked**; **idempotent** (same key → one journal);
+writer **not** anon/authenticated-executable; ledger tables no anon read / no authenticated write;
+automated internal-function guard returns empty.
+
+---
+
 ## Platform Wave 1B.1 — Audit Service Closeout ✅
 **Status:** migration `0016` applied to live Supabase · all gates passed · typecheck + tests + build pass
 

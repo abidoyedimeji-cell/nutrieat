@@ -47,13 +47,17 @@ classification, Wave-1A enrichment (before/after + reason + merchant scope + sys
 `AUDIT-REQUIREMENTS-MATRIX.md`; retention in `AUDIT-RETENTION.md`. **Do not begin Wave 1C automatically
 — awaiting review.**
 
-### Wave 1C — Money & ledger foundation
+### Wave 1C — Money & ledger foundation ✅ COMPLETE (migration 0017)
 Build **separated** concepts (no vague "balance"): customer payment · platform fee · merchant gross ·
 merchant commission · settlement hold · settlement adjustment · customer refund · customer credit ·
 merchant transfer · Stripe fee · cashback · points. Cash-valued entries and non-cash points are
 **never summed** (ADR 0007/0008).
-**Gate:** a simulated £100 order reconciles precisely from customer charge → merchant transfer →
-platform revenue.
+**Gate — PASSED:** double-entry ledger (`financial_accounts`/`journals`/`postings`), balance
+guaranteed by RPC + deferred constraint trigger, append-only, idempotent, internal-only writer,
+finance/admin-gated reconciliation; **points kept in `reward_ledger` (never in the cash ledger)**.
+Proven live: a £100 order reconciles exactly (charge = merchant + platform fee; net after Stripe
+fee = clearing residual). Money model in `MONEY-MODEL.md`; verification in
+`supabase/tests/wave1c_verification.sql`. **Do not begin Wave 1D automatically — awaiting review.**
 
 ### Wave 1D — Notification service
 Build a reusable **event → notification** layer as **two additive tables** (Wave 1A already shipped
