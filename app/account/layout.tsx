@@ -17,6 +17,8 @@ export default async function AccountLayout({ children }: { children: React.Reac
 
   // Attach any guest orders/entitlements made with this email to the account.
   await supabase.rpc("claim_my_purchases");
+  // Attach any pending platform/merchant staff invitations to this authenticated user (Wave 1A).
+  await supabase.rpc("accept_pending_invites");
 
   return (
     <div className="container-content py-12">
