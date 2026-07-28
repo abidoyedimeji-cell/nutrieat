@@ -4,6 +4,44 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Platform Wave 1C.1 — Money & Ledger Closeout ✅
+**Status:** additive migrations `0018`–`0022` applied to live Supabase · `0017` frozen/unchanged ·
+three stacked PRs (A→B→C) merged normally · SQL verification + 30 JS tests + typecheck + build pass.
+
+Correction-and-completion of Wave 1C.
+
+- **CRITICAL correction — 12% commission, not 20%.** Wave 1C shipped an 80/20 split (merchant 8000 /
+  platform 2000) that conflicted with the locked Farmers Market scheduled-delivery commission of **12%**.
+  Corrected to **88/12** everywhere (SQL fixtures, `test/money.test.ts`, `lib/money.ts`, `MONEY-MODEL.md`),
+  and the 12% now lands in `platform_commission_revenue`, not `platform_fee_revenue`. The residual left
+  in `stripe_clearing` after the merchant transfer is a **DEBIT balance (net-income position), never
+  revenue**. Distinguished **commission** (% of merchant gross) from **platform fee revenue** (flat
+  service charges).
+- **PR A (0018/0019):** additive chart kinds (`customer_general/refund/promotional_credit_liability`,
+  `platform_operating_expense`); canonical `reverse_financial_journal` (exact-opposite journal, linked by
+  `reverses_journal_id`, original untouched, rejects unposted/absent + double reversal, idempotent);
+  `issue_customer_credit`/`consume_customer_credit` (per-classification credit + cashback value-movement
+  primitive, negative-balance protection). All internal writers — a customer cannot issue their own credit.
+- **PR B (0020/0021):** `reward_ledger` stays points-authoritative (additive `status`+`programme` →
+  available excludes pending); cashback authority moved to the financial ledger (trigger blocks new
+  `kind='cashback'`, legacy rows preserved); `get_reward_ledger_audit()`; role-scoped safe reads
+  (customer/merchant/support/operations) that expose only computed balances, proven with simulated-role
+  tests. Hotfix `0021`: merchant summary NULL-coalesce (credit-only account collapsed to 0).
+- **PR C (0022 + docs/tests):** three reconciliation scenarios (£100 88/12; merchant-liability £5 →
+  8360/1140/500; platform-liability £5 → payable unchanged, platform absorbs 500);
+  `wave1c1_verification.sql`; requirements→tests matrix; docs. **Security finding fixed:** the automated
+  guard caught three internal functions left browser-executable by earlier migrations
+  (`_enqueue_notification` + two 0017 trigger fns) → revoked in `0022` (revoking EXECUTE doesn't stop
+  triggers from firing). Guard now returns zero rows.
+
+**Issues / resolved**
+- Split enum additions (`0018`) from usage (`0019`) — Postgres forbids using a new enum label in the
+  same transaction that adds it.
+- Merchant summary read returned 0 for a credit-only payable — `sum(credit) - sum(debit)` with
+  `sum(debit)=NULL` collapses to NULL; fixed by coalescing each sum before subtracting (`0021`).
+
+---
+
 ## Platform Wave 1C — Money & Ledger Foundation ✅
 **Status:** migration `0017` applied to live Supabase · all gates passed · typecheck + tests + build pass
 

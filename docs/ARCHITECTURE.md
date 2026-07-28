@@ -15,6 +15,19 @@ with an explicit `currency` column (ISO-4217). Currency is **locked to GBP** (`c
 avoids float bugs. *(This supersedes the earlier draft's `price_pence` — same idea, currency
 explicit rather than baked into the column name.)*
 
+**Money & ledger (Platform Wave 1C / 1C.1 — built).** Cash movements live in an append-only, idempotent
+**double-entry** ledger (`financial_accounts`/`financial_journals`/`financial_postings`, integer pence,
+GBP) written only through `post_financial_journal` and corrected only through `reverse_financial_journal`
+(never edits). **Commission** (a % of merchant eligible gross → `platform_commission_revenue`) is distinct
+from **platform fee revenue** (flat service charges → `platform_fee_revenue`); the Farmers Market
+scheduled-delivery commission is **locked at 12%** (a £100 order splits 88/12). A Stripe-clearing balance
+is a settlement asset position, **never revenue**. Customer credit (general/refund/promotional) and
+referral cashback are cash, one ledger account **kind** each, issued/consumed by internal-only writers
+(a customer cannot issue their own credit). **Points are non-cash** and stay in `reward_ledger` — never
+summed with cash, converted, or given a pound value; new cashback is cash and never re-enters points.
+Reads are role-scoped (customer/merchant/support/operations/finance) and return computed balances only.
+Full model: [`MONEY-MODEL.md`](./MONEY-MODEL.md).
+
 ---
 
 ## 1. Route map

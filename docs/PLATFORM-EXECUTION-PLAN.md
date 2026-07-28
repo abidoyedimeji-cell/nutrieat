@@ -55,9 +55,21 @@ merchant transfer · Stripe fee · cashback · points. Cash-valued entries and n
 **Gate — PASSED:** double-entry ledger (`financial_accounts`/`journals`/`postings`), balance
 guaranteed by RPC + deferred constraint trigger, append-only, idempotent, internal-only writer,
 finance/admin-gated reconciliation; **points kept in `reward_ledger` (never in the cash ledger)**.
-Proven live: a £100 order reconciles exactly (charge = merchant + platform fee; net after Stripe
-fee = clearing residual). Money model in `MONEY-MODEL.md`; verification in
-`supabase/tests/wave1c_verification.sql`. **Do not begin Wave 1D automatically — awaiting review.**
+Proven live: a £100 order reconciles exactly. Money model in `MONEY-MODEL.md`; verification in
+`supabase/tests/wave1c_verification.sql`.
+
+**Wave 1C.1 closeout ✅ COMPLETE (additive migrations 0018–0022; 0017 frozen; three stacked PRs A→B→C
+merged normally).** Corrected the commission to the locked **12%** — a £100 order splits **88/12**
+(merchant 8800 / **commission** 1200), not the earlier 80/20; the residual in `stripe_clearing` is a
+DEBIT/net-income position, **never revenue**. Added the canonical `reverse_financial_journal`;
+customer-credit issue/consume/reverse + the cashback value-movement primitive (per-classification,
+negative-balance protected, internal-only — a customer cannot issue their own credit); `reward_ledger`
+points-authority separation (new cashback → financial ledger; available points exclude pending) and
+role-scoped safe reads (customer/merchant/support/operations/finance), proven with simulated-role tests.
+Two item-liability reconciliations verified (merchant-liability £5 → payable 8360 / commission 1140 /
+refund 500; platform-liability £5 → merchant unchanged, platform absorbs 500). Verification in
+`supabase/tests/wave1c1_verification.sql`; matrix in `WAVE-1C1-REQUIREMENTS-MATRIX.md`.
+**Do not begin Wave 1D automatically — awaiting review.**
 
 ### Wave 1D — Notification service
 Build a reusable **event → notification** layer as **two additive tables** (Wave 1A already shipped

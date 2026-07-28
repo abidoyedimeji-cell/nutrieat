@@ -21,7 +21,16 @@ for the technical design, [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) for con
 > Append-only, idempotent double-entry cash ledger (`financial_accounts`/`journals`/`postings`, pence
 > GBP), balance-enforced + reconcilable, internal-only writer, finance-gated reads; **points stay in
 > `reward_ledger`, never mixed with cash**. Money model in [`MONEY-MODEL.md`](./MONEY-MODEL.md).
-> Marketplace backbone continues per the wave plan; **Wave 1D (Notifications) awaits review**.
+>
+> **Platform Wave 1C.1 (Money & Ledger Closeout) — ✅ COMPLETE** (additive migrations 0018–0022; 0017
+> frozen; three stacked PRs merged). Corrected the commission to the locked **12%** (88/12, not 80/20; the
+> 12% is **commission revenue**, and a Stripe-clearing balance is **never revenue**). Added the canonical
+> `reverse_financial_journal`, customer-credit issue/consume/reverse + cashback value primitive
+> (negative-balance protected, internal-only), `reward_ledger` points-authority separation (cashback →
+> financial ledger; available excludes pending), and role-scoped safe reads
+> (customer/merchant/support/operations/finance) proven with simulated-role tests. Matrix in
+> [`WAVE-1C1-REQUIREMENTS-MATRIX.md`](./WAVE-1C1-REQUIREMENTS-MATRIX.md).
+> Marketplace backbone continues per the wave plan; **Wave 1D (Notifications) awaits review** (not started).
 
 ## Overall: ~55% — execution underway
 
