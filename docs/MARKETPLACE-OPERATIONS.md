@@ -18,45 +18,111 @@ not to require automation on day one.
 
 ---
 
-## 1. Business roles & responsibilities
+## Amendment 1 (confirmed)
 
-Authorization is enforced by the roles tables (`platform_staff`, `merchant_staff`, `drivers`) that
-replace the temporary `ADMIN_EMAILS` allowlist. Every merchant-scoped action is gated by an
-**active** `merchant_staff` row (`status='active'`), which is the cross-merchant isolation boundary.
+The following marketplace decisions are now **CONFIRMED** (Amendment 1, 2026-07-28) and folded into
+the sections below — they are **decisions, not assumptions** (see `MARKETPLACE-DECISIONS.md`
+C22–C33 and the "Amendment 1" banner in `MARKETPLACE-ARCHITECTURE.md`):
 
-| Role | Table / enum value | Core responsibilities |
-|------|--------------------|-----------------------|
-| **Customer** | `auth.users` + `profiles` | Browse within discovery radius, build basket, pay, confirm/reject items, request refunds, open support cases, refer customers/merchants/towns. |
-| **Merchant owner** | `merchant_staff.role = owner` | Legal signatory of the merchant; completes Stripe Connect KYC; manages catalogue, pricing, staff invites; sees own settlements/payouts. |
-| **Merchant manager** | `merchant_staff.role = manager` | Day-to-day catalogue + inventory upkeep, imports, accepting/rejecting orders, marking availability, overseeing picking. |
-| **Merchant picker** | `merchant_staff.role = picker` | Physically picks, substitutes, packs orders; uploads pick/pack evidence; hands goods to the driver. No pricing or financial access. |
-| **Platform operations (ops)** | `platform_staff.role = operations` | Recruits/onboards merchants, defines `service_zones` and `delivery_slots`, plans `routes`, assigns tasks, manages platform eggs/water inventory, handles suspensions and quality. |
-| **Finance** | `platform_staff.role = finance` | Approves refunds, computes/releases `merchant_settlements` + `merchant_transfers`, reconciles Stripe, manages payout holds. |
-| **Support** | `platform_staff.role = support` | Owns `support_cases`, mediates rejections/disputes, coordinates re-attempts and goodwill. |
-| **Driver** | `drivers` (own driver) | Runs `routes`; collects sub-orders from stores in the 04:00–11:00 window; verifies counts; consolidates loads; delivers; captures proof-of-delivery; reports missing/damaged. |
-| **Platform-owned supplier op** | `platform_staff.role = operations` (inventory hat) | Manages the **platform's own** eggs/water stock (`platform_inventory`), restocking and reservations; these lines are picked from our stock, not from a merchant store. |
-| **Admin** | `platform_staff.role = admin` | Superset; manages zones, staff, and any override. |
-
-Merchants **never** see another merchant's orders, products, evidence, customers or payouts, and are
-**never** shown a whole `market_order` — only their own `merchant_sub_orders`, the items on them, and
-the **minimum customer data** (delivery first name + area) needed to fulfil. Drivers see only tasks
-on their assigned `routes` plus the handover data (name, address, phone) for their delivery window.
+- **Hubs & geography (C22–C24).** Town-centre **hubs = Eltham, Dartford, Erith**. Discovery is
+  **5 miles from the hub**, not from each merchant, and is modelled **separately** from delivery and
+  collection eligibility. A customer inside the 5-mile discovery radius may still be **outside** an
+  active delivery route — collection may still work. → §1 (geography), §2, §5, §22.
+- **Hub-based waitlist (C25–C26).** One active membership per user/email **per hub**; location demand
+  = **count of unique active waitlist entries** per hub — **no votes counter**. → §22.
+- **Merchant suggestions & referrals (C27).** Customers suggest/refer local merchants; **reward is
+  never granted on mere submission** — separate milestones gate it. → §22.
+- **Roles (C28).** **10 DB-backed roles**; super-admin bootstrap identity **`abidoyedimeji`**;
+  `merchant_admin` manages **only explicitly-assigned** merchant orgs/stores (cross-merchant
+  isolation mandatory). → §1.
+- **Three-level delivery confirmation (C29).** Customer may act at **full-order / merchant-sub-order /
+  individual-item** level; never forced to reject a whole order for one bad item. → §14.
+- **Returns (C30).** A first-class, fully-audited **manual** returns workflow; goods returned to the
+  merchant normally **before end of operating day** (`return_deadline`). → §23, §21.2 SLA.
+- **Fee-refund rules (C31–C32).** The **service fee is retained by default**; product value +
+  refundable fulfilment charges may be refunded; each fee component is stored separately; an
+  authorised admin **may override** to refund a fee with actor + reason + amount + timestamp + audit.
+  Fees are **not** "never refundable". → §16.
+- **Payout reconfirmation (C33).** **Delivery alone does not release funds**; settlement is based only
+  on **accepted** item quantities/values and must be **reconfirmed** after any delivery-time return or
+  refund decision. → §17.
 
 ---
 
-## 2. Merchant onboarding
+## 1. Business roles & responsibilities
 
-Onboarding + Stripe Connect KYC runs **pre-launch** (long lead time) and only in the three launch
-areas. A merchant walks `merchant_status`: `onboarding` → `active` (with `pending`/`paused`/
-`suspended` as the other states).
+Authorization is enforced by **DB-backed roles** across three tables — `platform_staff`,
+`merchant_staff`, `drivers` — that replace the temporary `ADMIN_EMAILS` allowlist (kept only as a
+bootstrap fallback until `super_admin` is seeded). There are **10 confirmed roles** (C28). Every
+merchant-scoped action is gated by an **active** `merchant_staff` row (`status='active'`), which is
+the cross-merchant isolation boundary: a `merchant_admin` manages **only the merchant orgs/stores
+explicitly assigned** to them and can never resolve into another merchant's rows.
+
+The role value sets are the confirmed enums: `platform_role` = `super_admin, platform_admin,
+operations_staff, finance_staff, support_staff`; `merchant_staff_role` = `merchant_admin,
+merchant_manager, merchant_picker`; plus `driver` (`drivers`) and `customer` (default authenticated
+user). **Super-admin bootstrap identity = `abidoyedimeji`** (resolve to a real Supabase user id +
+verified email at implementation).
+
+| Role | Table / enum value | Core responsibilities |
+|------|--------------------|-----------------------|
+| **Customer** | `customer` (default authenticated user + `profiles`) | Browse within the hub discovery radius, build basket, pay, confirm/reject at **order / sub-order / item** level, request refunds & **returns**, open support cases, refer customers/merchants, join hub waitlists. |
+| **Super admin** | `platform_staff.role = super_admin` | Everything; superset override. **Bootstrap identity `abidoyedimeji`** (real user id resolved at implementation). |
+| **Platform admin** | `platform_staff.role = platform_admin` | Platform-wide admin below super_admin; manages zones, staff, and overrides. |
+| **Operations staff** | `platform_staff.role = operations_staff` | Recruits/onboards merchants, defines `service_zones` and `delivery_slots`, plans `routes`, assigns tasks, manages **platform eggs/water inventory** (`platform_inventory`), handles suspensions, quality, and **returns logistics**. |
+| **Finance staff** | `platform_staff.role = finance_staff` | Approves refunds (incl. **authorised fee overrides**), computes/releases `merchant_settlements` + `merchant_transfers`, reconciles Stripe, manages payout holds and **reconfirmation**. |
+| **Support staff** | `platform_staff.role = support_staff` | Owns `support_cases`, mediates rejections/returns/disputes, coordinates re-attempts and goodwill. |
+| **Merchant admin** | `merchant_staff.role = merchant_admin` | Legal signatory / manager of **only the assigned** merchant org(s)/stores; completes Stripe Connect KYC; manages catalogue, pricing, staff invites; sees own settlements/payouts. |
+| **Merchant manager** | `merchant_staff.role = merchant_manager` | Day-to-day catalogue + inventory upkeep, imports, accepting/rejecting orders, marking availability, overseeing picking, for an assigned store. |
+| **Merchant picker** | `merchant_staff.role = merchant_picker` | Physically picks, substitutes, packs orders; uploads pick/pack evidence; hands goods to the driver. No pricing or financial access. |
+| **Driver** | `drivers` (`driver`) | Runs `routes`; collects sub-orders from stores in the 04:00–11:00 window; verifies counts; consolidates loads; delivers; captures proof-of-delivery; reports missing/damaged; performs **return collections** from customers. |
+
+Merchants **never** see another merchant's orders, products, evidence, customers or payouts, and are
+**never** shown a whole `market_order` — a `merchant_admin`/`merchant_manager`/`merchant_picker` reads
+only its own `merchant_sub_orders`, the items on them, and the **minimum customer data** (delivery
+first name + area) needed to fulfil. Drivers see only tasks on their assigned `routes` plus the
+handover data (name, address, phone) for their delivery window.
+
+---
+
+## 2. Hubs, geography & merchant onboarding
+
+**Hubs & geography (confirmed).** The Farmers Market is anchored on **town-centre hubs**, not on
+individual merchants. The three pilot hubs are **Eltham, Dartford, Erith** — each a `launch_areas`
+row with `is_hub=true`, a `hub_postcode`, and hub coordinates in `centroid`. Discovery is measured
+**5 miles from the hub** (a `discovery` `service_zone`, radius from the hub `centroid`) — **not** from
+each merchant. The confirmed model keeps these concepts **separate**:
+
+| Concept | Where it lives |
+|---------|----------------|
+| Town-centre hub (Eltham / Dartford / Erith) | `launch_areas` row (`is_hub=true`) |
+| Hub coordinates | `launch_areas.centroid` |
+| 5-mile discovery area | `service_zones` type `discovery` (radius from hub centroid) |
+| Customer postcode coordinates | `user_addresses.location` |
+| Nearest hub | `user_addresses.nearest_hub_id` (computed at address save) |
+| Customer-to-hub distance | `user_addresses.hub_distance_m` |
+| Delivery eligibility | inside an **active** `delivery` `service_zone` (stricter test) |
+| Collection eligibility | inside a `collection` zone **+** merchant `collection_enabled` |
+| Delivery service zones | `service_zones` type `delivery` |
+| Route coverage | `service_zones` type `route` (which zones a live route serves today) |
+
+**Discovery ≠ delivery eligibility (locked).** A customer inside the 5-mile discovery radius of a hub
+may still be **outside** an active `delivery` zone or today's `route` coverage. In that case
+**collection may still work** even though delivery does not — ordering re-checks the delivery/
+collection zone + route coverage at basket-price time, not just discovery. Every merchant is attached
+to a hub (`launch_area_id`) and a `service_zone_id`.
+
+**Merchant onboarding.** Onboarding + Stripe Connect KYC runs **pre-launch** (long lead time) and
+only in the three hub areas. A merchant walks `merchant_status`: `onboarding` → `active` (with
+`pending`/`paused`/`suspended` as the other states).
 
 | Step | Who | Action | System effect |
 |------|-----|--------|---------------|
 | 1. Recruit | Ops | Approach a local butcher in Dartford/Erith/Eltham; explain commission (8% collection / 12% delivery), packing + handover responsibilities. | — |
 | 2. Agreement | Ops + owner | Sign the marketplace supplier agreement (commission, cold-chain, refund/cancellation terms). | Paper/legal, referenced in the merchant record. |
-| 3. Create merchant | Ops | Create the merchant record; set `launch_area_id`, `service_zone_id`, `collection_enabled`/`delivery_enabled`, `pickup_window_start=04:00`/`pickup_window_end=11:00`, `prep_lead_time_minutes`, `min_order_cents=4000`, `commission_default=0.120`. | Merchant created with `merchant_status='onboarding'`. |
-| 4. Invite owner | Ops | Invite the owner's email as `merchant_staff.role='owner'`. | `merchant_staff` row `status='invited'` → `active` on acceptance. |
-| 5. Stripe Connect Express | Owner | Ops server action creates the Stripe **Express** account + account link; owner completes KYC on Stripe's hosted flow. | `connect_accounts` row created; `account.updated` webhook drives `charges_enabled`/`payouts_enabled`/`details_submitted` + `connect_status`. |
+| 3. Create merchant | Ops | Create the merchant record; set `launch_area_id` (the **hub**: Eltham/Dartford/Erith), `service_zone_id`, `collection_enabled`/`delivery_enabled`, `pickup_window_start=04:00`/`pickup_window_end=11:00`, `prep_lead_time_minutes`, `min_order_cents=4000`, `commission_default=0.120`. | Merchant created with `merchant_status='onboarding'`. |
+| 4. Invite admin | Ops | Invite the owner's email as `merchant_staff.role='merchant_admin'`, assigned to **this merchant only** (cross-merchant isolation). | `merchant_staff` row `status='invited'` → `active` on acceptance. |
+| 5. Stripe Connect Express | Merchant admin | Ops server action creates the Stripe **Express** account + account link; the merchant admin completes KYC on Stripe's hosted flow. | `connect_accounts` row created; `account.updated` webhook drives `charges_enabled`/`payouts_enabled`/`details_submitted` + `connect_status`. |
 | 6. Catalogue load | Manager/Ops | Import the merchant's stock list (§3). | Products staged then applied to `market_products`. |
 | 7. Go live | Ops | Verify Connect `payouts_enabled=true`, at least one available product, opening/collection hours set. | `merchant_status='active'`, `onboarded_at` set. Merchant now discoverable to in-zone customers. |
 
@@ -135,8 +201,10 @@ fulfilment it decrements (`fulfil`); on cancellation it releases. Eggs/water are
 ## 5. Customer ordering
 
 1. **Discovery** — logged-in customer with a geocoded default address browses merchants within the
-   **5-mile discovery radius** (`ST_DWithin`, 8046.72 m) **and** inside an active `discovery`
-   `service_zone`. Discovery does **not** guarantee delivery (§5 note below).
+   **5-mile discovery radius of their nearest hub** (`ST_DWithin` from `launch_areas.centroid`,
+   8046.72 m — an active `discovery` `service_zone`). The radius is measured **from the hub**, not
+   from each merchant; `user_addresses.nearest_hub_id`/`hub_distance_m` are computed at address save.
+   Discovery does **not** guarantee delivery (§5 note below).
 2. **Basket** — customer adds products to a server-side `baskets` + `basket_items` (price snapshot at
    add). The basket may span one merchant, several merchants, and/or platform eggs/water.
 3. **Minimum order** — order subtotal must be **≥ £40.00** (`min_order_cents=4000`) to check out.
@@ -155,10 +223,12 @@ fulfilment it decrements (`fulfil`); on cancellation it releases. Eggs/water are
    PaymentIntent. `market_orders` moves `pending_payment` → `paid` on the payment webhook (idempotent
    via `market_payment_events`). The customer never sees a delivery *charge* on standard delivery.
 
-> **Discovery ≠ delivery eligibility.** A merchant can be visible at 4.9 miles yet the address falls
-> outside the active `delivery` zone (`ST_Covers`). Ordering requires the address to be inside an
-> active `delivery` (for delivery) or `collection` (for collection) zone — a separate, stricter test
-> than the 5-mile browse.
+> **Discovery ≠ delivery eligibility (confirmed).** A merchant can be visible at 4.9 miles from the
+> hub yet the address falls outside the active `delivery` zone (`ST_Covers`) or today's `route`
+> coverage. Ordering requires the address to be inside an active `delivery` (for delivery) or
+> `collection` (for collection) zone — a separate, stricter test than the 5-mile browse. A customer
+> inside the discovery radius but **outside** an active delivery route may still be able to
+> **collect** (if inside a `collection` zone + merchant `collection_enabled`).
 
 ---
 
@@ -315,22 +385,40 @@ For a **collection** fulfilment method there is **no `delivery_task`** and **no 
 
 ---
 
-## 14. Customer confirmation
+## 14. Customer confirmation (three levels — confirmed)
 
-After delivery/collection the customer accepts or rejects **each item**. One final decision per item
-is recorded in `item_confirmations` (`decision` `accepted`/`rejected`, unique per item).
+At delivery/collection the customer can act at **three granularities — the whole order, a merchant
+sub-order, or an individual item** — and is **never forced to reject a whole order over one bad
+item** (C29). Bulk actions **fan out to item-level rows**, so the underlying truth is always
+item-level; the **scope** of the action is recorded for audit in `order_confirmations` (`scope`
+`order|sub_order|item`), while the one final per-item decision lives in `item_confirmations`
+(`decision` `accepted`/`rejected`, unique per item).
+
+**Available actions (`order_confirmations.action`):**
+
+| Action | Scope | Effect |
+|--------|-------|--------|
+| `accept_all` | order / sub-order | Accept everything in scope; each item `delivered` → `accepted`. |
+| `reject_order` | order | Reject the whole order; fans out to item rejections (§15). |
+| `reject_sub_order` | sub-order | Reject one merchant's sub-order only; other merchants' items are unaffected. |
+| `reject_items` | item(s) | Reject only the selected items — the default granular case. |
+| `request_return` | item(s) | Ask for selected delivered items to be **returned** to the merchant (§23). |
+| `report_issue` | item(s) | Report **missing / damaged / incorrect** items (feeds `rejection_reason`). |
+| `approve_substitution` / `reject_substitution` | item | Approve or reject a proposed substitute (§18). |
 
 | # | Step | Effect |
 |---|------|--------|
 | 1 | Window opens | Confirmation window starts at `delivery_proof` (delivery) or collection handover. |
-| 2 | Accept item | `item_confirmations.decision='accepted'`; item `delivered` → `accepted`; contributes to merchant payout. |
-| 3 | Reject item | `item_confirmations.decision='rejected'`; opens the rejection path (§15). |
-| 4 | Window elapses | **Auto-confirm job** writes `decision='accepted'` with a system actor for any un-actioned item; item → `accepted`. |
+| 2 | Accept (order / sub-order / item) | `item_confirmations.decision='accepted'` for every item in scope; items `delivered` → `accepted`; contributes to merchant payout. |
+| 3 | Reject (order / sub-order / item) | Fans out to `item_confirmations.decision='rejected'` per item in scope; opens the rejection path (§15) and, where goods go back, the returns path (§23). |
+| 4 | Report / request return | Records the customer action + evidence; routes to rejection (§15), refund (§16) and/or return (§23). |
+| 5 | Window elapses | **Auto-confirm job** writes `decision='accepted'` with a system actor for any un-actioned item; item → `accepted`. |
 
-When every item is resolved with no open rejection, the order moves `delivered` → `completed`
-(`customer_confirmation_status` reaches `confirmed`/`auto_confirmed`). The confirmation window
-clearing is a **hard gate on merchant payout** (§17) — merchants are not paid until the customer has
-had their chance to reject.
+When every item is resolved with no open rejection/return, the order moves `delivered` → `completed`
+(`customer_confirmation_status` reaches `confirmed`/`auto_confirmed`; `partially_rejected` if some
+items were rejected). The confirmation window clearing is a **hard gate on merchant payout** (§17) —
+merchants are not paid until the customer has had their chance to accept, reject, or return at any of
+the three levels.
 
 ---
 
@@ -352,7 +440,9 @@ A rejection captures a reason, evidence, and a quantity, and is reviewed before 
 
 Rejection evidence and the item's evidence chain are `locked_at` once a rejection opens, preserving
 the full history for audit. An approved rejection reduces the merchant's `accepted_subtotal_cents`
-and therefore the payout (§17).
+and therefore the payout (§17), and **triggers payout reconfirmation** (§17). A rejection is not the
+same as a **return**: where the physical goods must go back to the merchant, an approved rejection (or
+a customer `request_return` action, §14) opens a separate, fully-audited **return** (§23).
 
 ---
 
@@ -369,9 +459,33 @@ Refunds are an idempotent money-out ledger (`refunds`, `refund_status`). Each re
 | 4 | Stripe refund issued | `approved` → `processing` |
 | 5 | Stripe webhook confirms | `processing` → `completed` (a Stripe failure loops `processing` → `failed` → `processing`, same key) |
 
+**Refund scope & type.** Each refund records a `scope` (`item` / `multi_item` / `sub_order` /
+`order`) and a `refund_type` (`full` / `partial`) — a customer is never forced to refund a whole
+order to fix one item. A refund **changes item status** (`accepted` → refunded via `refunded_cents`,
+or `rejected`) **and reduces merchant settlement**, so it always **triggers payout reconfirmation**
+(§17).
+
+**Fee-refund rules (confirmed, C31–C32).** Fees are **not** "never refundable", but the default is to
+**retain the service fee**. Each fee component is stored **separately** so it can be treated on its
+own:
+
+| Component | Column | Default on refund |
+|-----------|--------|-------------------|
+| Product value | `market_order_items.line_total_cents` (Σ) → `refunds.product_value_cents` | **Refundable** |
+| Small-order fee (service) | `market_orders.small_order_fee_cents` | **Retained** by default |
+| Multi-store handling (service) | `multistore_fee_cents` | **Retained** by default |
+| Priority-window (fulfilment charge) | `priority_fee_cents` | **Refundable if the priority service failed** |
+| Commission | derived | recomputed on accepted goods |
+
+**Admin fee override.** An **authorised admin** (`finance_staff`/`platform_admin` or above) may
+override and refund a retained fee. Every override **requires** an authorised actor
+(`refunds.fee_override_by`), a reason (`fee_override_reason`), the amount (`fee_refund_cents`), a
+timestamp, and an `audit_events` row — enforced on the `is_fee_override=true` path. The refund total
+is `refunds.amount_cents = product_value_cents + fee_refund_cents`.
+
 **Automated vs manual.** Small, clear-cut refunds (merchant marked an item `unavailable`; a
 `missing_item` confirmed at handover) can be auto-approved to `approved` and processed. Contested or
-higher-value cases (quality/temperature disputes, whole sub-order) go through manual
+higher-value cases (quality/temperature disputes, whole sub-order, any fee override) go through manual
 `pending_review`. **Accepted-items-only payout consequence:** because the merchant is paid on accepted
 items only, a refunded item contributes **£0** to that merchant's payout — the refund reduces
 `accepted_subtotal_cents` and is mirrored as a `settlement_adjustments` line against the settlement.
@@ -381,10 +495,15 @@ manual refund decisions target a same-day/next-business-day response.
 
 ---
 
-## 17. Merchant payout
+## 17. Merchant settlement & payout
 
 Merchants are paid on **accepted items only**, via Stripe Connect transfers, after the order clears
-its confirmation window.
+its confirmation window. **Delivery alone does NOT release funds** (C33). The confirmed payout
+lifecycle runs: payment received → merchant fulfilment → collection → delivery → **customer item
+confirmation** → return/rejection/refund review → **settlement recalculation** → **payout
+reconfirmation** → transfer eligible → transfer initiated → paid. Settlement is based **only on the
+accepted item quantities/values**; rejected / returned / missing / cancelled / refunded items reduce
+the eligible amount.
 
 **Computation (`merchant_settlements`, one per sub-order):**
 
@@ -403,13 +522,18 @@ when **all** hold:
 
 1. Sub-order `collected`, and order `delivered`/`completed`.
 2. Confirmation window has elapsed (§14).
-3. No open `item_rejections` on the sub-order.
-4. `connect_accounts.payouts_enabled = true`.
+3. No open `item_rejections`, `item_returns`, or `refunds` on the sub-order.
+4. Settlement recalculated **and reconfirmed** after the last delivery-time decision.
+5. `connect_accounts.payouts_enabled = true`.
 
-If a dispute is open, the settlement sits `on_hold` (`eligible` → `on_hold`, returns to `eligible`
-when the dispute closes). Once eligible, finance releases **one `merchant_transfers` per merchant**
-(unique `idempotency_key`, Stripe transfer), `payout_status` `eligible` → `processing` → `paid` on
-the `transfer.paid` webhook. A post-payout refund clawback is a rare, flagged `reversed`.
+**Payout reconfirmation (confirmed, C33).** **Any** delivery-time return, rejection, or refund
+decision forces a reconfirmation loop before funds can move: `eligible` → `on_hold` → `recalculating`
+→ `reconfirmed` → `eligible`. Settlement is recomputed on the new **accepted** subtotal (the refund/
+return is mirrored as a `settlement_adjustments` line), and payout is **reconfirmed** — the merchant
+is never paid on funds that a return or refund has since removed. Once (re)confirmed eligible, finance
+releases **one `merchant_transfers` per merchant** (unique `idempotency_key`, Stripe transfer),
+`payout_status` `eligible` → `processing` → `paid` on the `transfer.paid` webhook. A post-payout
+refund clawback is a rare, flagged `reversed`.
 
 Distinct money concepts stay in distinct columns: customer payment (`market_orders.total_cents`),
 commission, platform fees, merchant transfer (`merchant_transfers.amount_cents`), customer refund
@@ -494,7 +618,7 @@ account restricted (`payouts_enabled=false`), or agreement breach.
 | **Breakdown mid-route** | Ops reassigns remaining `collection_tasks`/`delivery_tasks` to another driver/route; tasks stay `assigned` and re-sequence. |
 | **Route over capacity** | Ops splits the route or moves tasks to a second `routes` for the window; delivery slots respect `delivery_slots.capacity`. |
 | **Store closed / no goods** | Collection task `arrived` → `failed`; affected items refunded; ops decides re-collect (new task) or refund the sub-order. |
-| **Return-to-base / return-to-merchant** | Undeliverable goods return with the driver; perishables handled per cold-chain terms; ops books a refund or re-attempt. |
+| **Return-to-base / return-to-merchant** | Undeliverable goods return with the driver; perishables handled per cold-chain terms; ops books a refund or re-attempt. A **customer-initiated return** of delivered goods is a distinct, fully-audited workflow (§23), targeting the merchant before end of operating day. |
 
 ### 20.4 Failed delivery
 
@@ -524,10 +648,13 @@ enum) and emailed via the existing `lib/email.ts` + **Resend** integration.
 | Collection/delivery failed | Customer, ops | email + in_app |
 | Confirmation window closing | Customer | email |
 | Refund approved / completed | Customer | email + in_app |
-| Settlement eligible / transfer paid | Merchant owner, finance | email + in_app |
+| Return approved / collected / confirmed | Customer, ops, target merchant | email + in_app |
+| Settlement eligible / **reconfirmed** / transfer paid | Merchant admin, finance | email + in_app |
 | Task assigned / route ready | Driver | in_app (+ email) |
 | Support case update | Customer or merchant | email + in_app |
-| Merchant suspended / reinstated | Merchant owner, ops | email |
+| Merchant suspended / reinstated | Merchant admin, ops | email |
+| Waitlist invited / activated | Customer | email + in_app |
+| Merchant-suggestion milestone reward | Referring customer | email + in_app |
 
 ### 21.2 Service-level expectations (SLA)
 
@@ -540,10 +667,112 @@ operational goals, not contractual guarantees.
 | Merchant picks & marks `ready` | Before the assigned driver pickup slot, within the **04:00–11:00** window. |
 | Driver collection window | All collections completed **04:00–11:00**. |
 | Delivery window | Standard: on the scheduled day (booked **≥2 days** ahead). Priority: within the chosen 3-hour window (9–12 / 12–3 / 3–6). |
-| Confirmation window | Customer has a defined window after delivery/collection to accept/reject before auto-confirm (exact length locked in DECISIONS). |
+| Confirmation window | Customer has a defined window after delivery/collection to accept/reject/return at order, sub-order, or item level before auto-confirm (exact length locked in DECISIONS). |
 | Refund response | Automated refunds near-immediate on approval; manual decisions **same-day / next business day**. |
+| **Return to merchant** | Approved returns collected from the customer and **returned to the relevant merchant before end of the operating day** (`return_deadline`), then merchant-confirmed and financially reconciled. |
 | Support first response | **1 business day**; delivery-day issues handled within hours during the operating window. |
-| Merchant payout | Released after the confirmation window clears and eligibility holds — target within a few days of `completed`. |
+| Merchant payout | Released after the confirmation window clears **and after any delivery-time return/refund has been reconciled and the payout reconfirmed** (§17) — target within a few days of `completed`. |
+
+---
+
+## 22. Customer acquisition: hub waitlist, referrals & merchant suggestions
+
+### 22.1 Hub waitlist (confirmed)
+
+The waitlist is **hub-based** (C25–C26): a customer joins the waitlist for a specific hub, and
+**location demand = the count of unique active waitlist entries per hub** — there is **no votes
+counter**. The customer flow:
+
+1. **Postcode entry** — the customer enters a postcode.
+2. **Nearest/supported hub resolution** — the postcode is geocoded and resolved to the nearest /
+   supported hub (`launch_areas`, `is_hub=true`). A postcode inside two hubs' 5-mile areas defaults to
+   the nearest **live** hub and lists the others.
+3. **Access check** — if the hub is live and the customer is inside an orderable zone, they proceed to
+   the market; otherwise they are offered the waitlist.
+4. **Request Farmers Market access** — the customer requests access for that hub.
+5. **Join the hub waitlist** — a `location_waitlist` row is created for `(user/email, launch_area_id)`.
+
+**One active membership per user/email per hub** (partial-unique while `status in
+('pending','invited')`). Statuses walk `waitlist_status`: `pending` → `invited` → `activated`, or
+`opted_out` if the customer leaves. Each row stores **postcode, hub (`launch_area_id`), source,
+`referral_code`**, and the timeline stamps `joined_at` / `invited_at` / `activated_at` /
+`opted_out_at`.
+
+| Stage | `waitlist_status` | What happens |
+|-------|-------------------|--------------|
+| Join | `pending` | Customer requests access to a hub; `joined_at` set; counts toward that hub's demand. |
+| Invite | `invited` | Ops invites the customer as the hub opens up; `invited_at` set. |
+| Activate | `activated` | Access granted; the customer can now order; `activated_at` set (no longer counts as open demand). |
+| Leave | `opted_out` | Customer opts out; `opted_out_at` set; frees the active-membership slot. |
+
+Hub demand for prioritising launch = `count(*) where status in ('pending','invited')` per hub — a
+COUNT of unique active entries, never a mutable tally.
+
+### 22.2 Customer referrals
+
+Customers refer other customers via a personal `referral_codes` row. Rewards follow the locked model:
+pre-launch = **5% cashback** on a completed paid cookbook pre-order (registration alone does not
+count); post-launch = **Farmers Market points** released after the first qualifying order completes
+and clears the cancellation window (`referrals` / `referral_status`; see `MARKETPLACE.md`).
+
+### 22.3 Merchant suggestions & referrals (confirmed)
+
+Customers can **suggest or refer a local merchant** into a hub. A `merchant_suggestions` row stores
+the merchant **name, category, address/location, contact, website, social profile, note**, the
+**referrer**, a **`referral_code`**, a **unique referral URL** and **QR code**, plus
+**duplicate detection** (`duplicate_of`) and the **onboarding outcome** (`onboarded_merchant_id`).
+
+The suggestion walks `merchant_suggestion_status`:
+
+```
+suggested → duplicate_check → research_pending → contacted → interested → onboarding → approved → active
+```
+
+**A reward is NOT awarded on mere submission.** Reward-bearing stages are tracked separately in
+`merchant_referral_milestones`, so the referrer is only rewarded once the merchant actually
+progresses:
+
+| Milestone | When it fires | Reward-bearing |
+|-----------|---------------|----------------|
+| `suggestion_submitted` | Customer submits the suggestion | **No** (recorded, not rewarded) |
+| `merchant_contacted` | Ops reaches the merchant | Optional / no cash reward |
+| `onboarding_completed` | Merchant finishes onboarding | **Yes** |
+| `merchant_activated` | Merchant goes `active` and is discoverable | **Yes** |
+| `first_completed_order` | Merchant's first completed order | **Yes** |
+
+Duplicate detection (`duplicate_of`, name/location match) prevents rewarding the same merchant twice
+through different referrers.
+
+---
+
+## 23. Returns (confirmed)
+
+Returns are handled **manually by the platform team**, but **every return is fully represented and
+audited** (C30). A return is distinct from a rejection (§15): it is a **physical good going back to
+the merchant**. Each return is an `item_returns` row and walks `return_status`:
+
+```
+return_requested → return_approved → return_assigned → collected_from_customer
+  → returned_to_merchant → return_confirmed → financially_reconciled
+return_requested → return_rejected        (not eligible)
+```
+
+| # | Stage | `return_status` | What happens |
+|---|-------|-----------------|--------------|
+| 1 | Customer requests return | `return_requested` | From a `request_return` action (§14) or an approved rejection (§15); records the order item, quantity, reason, and customer evidence. |
+| 2 | Ops reviews | `return_approved` / `return_rejected` | Ops approves (sets the **`return_deadline` = end of the operating day**) or rejects as ineligible. |
+| 3 | Assign operator | `return_assigned` | Ops assigns an operator/driver (`assigned_operator_id`) to collect from the customer. |
+| 4 | Collect from customer | `collected_from_customer` | Driver collects the goods (`collection_time`), captures evidence. |
+| 5 | Return to merchant | `returned_to_merchant` | Goods delivered back to the **target merchant** (`target_merchant_id`) — **normally before end of operating day**. |
+| 6 | Merchant confirms | `return_confirmed` | Merchant confirms receipt (`merchant_confirmed_at`, merchant evidence). |
+| 7 | Reconcile | `financially_reconciled` | Finance applies the `financial_adjustment_cents`, triggering settlement recalculation + **payout reconfirmation** (§17). |
+
+Each `item_returns` row stores the **order item, quantity, reason, customer evidence, assigned
+operator/driver, collection time, target merchant, return deadline, return confirmation, merchant
+confirmation, financial adjustment, and admin notes**. The target is always to get goods
+**`returned_to_merchant` before end of the operating day** (SLA §21.2). `financially_reconciled` is
+terminal and feeds the payout reconfirmation loop (§17) — a merchant is never paid for goods that came
+back.
 
 ---
 
