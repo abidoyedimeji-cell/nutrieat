@@ -184,3 +184,12 @@ Grows into: **a performance meal-planning and grocery-shopping ecosystem.**
 
 Building in that order keeps the launch commercially useful without overbuilding the
 technically hard supermarket features before demand is proven.
+
+### Next initiative — The Farmers Market
+
+A local agri-food marketplace **inside** NutriEat: logged-in users order organic produce,
+meats, farm eggs and mineral water from suppliers within a **5-mile radius**, for collection
+or scheduled delivery. Two-sided marketplace; the hard 80% is supply + Stripe Connect payouts
++ logistics, not code. Commercial + referral/rewards model is **locked** and the phased
+Level A → B → C build plan is in [`MARKETPLACE.md`](./MARKETPLACE.md). **Sequencing: launch
+the cookbook first; build the marketplace next, starting supplier outreach now in parallel.**
