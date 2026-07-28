@@ -81,6 +81,20 @@ export function valueSystemForRewardKind(kind: "cashback" | "points"): ValueSyst
   return kind === "cashback" ? "cash" : "points";
 }
 
+// ── Customer credit classifications (CASH, pence — financial ledger) ──────────────────────────────
+// Each is independently calculable (separate account kind in the DB). referral_cashback is 'cashback'.
+export const CASH_CREDIT_CLASSIFICATIONS = ["general", "refund", "promotional", "cashback"] as const;
+export type CashCreditClassification = (typeof CASH_CREDIT_CLASSIFICATIONS)[number];
+
+// ── Points lifecycle (NON-CASH — reward_ledger) ──────────────────────────────────────────────────
+// Available points EXCLUDE pending points. Points are never given a pound value and never summed with cash.
+export const REWARD_STATUSES = ["pending", "available", "expired", "reversed"] as const;
+export type RewardStatus = (typeof REWARD_STATUSES)[number];
+/** A points row counts toward the *available* balance only when settled to 'available'. */
+export function pointsCountTowardAvailable(status: RewardStatus): boolean {
+  return status === "available";
+}
+
 /** Guard: refuse to combine amounts from different value systems (cash pence + points). */
 export function assertSameValueSystem(a: ValueSystem, b: ValueSystem): void {
   if (a !== b) throw new Error(`refusing to combine value systems: ${a} + ${b} (cash pence and points never mix)`);
