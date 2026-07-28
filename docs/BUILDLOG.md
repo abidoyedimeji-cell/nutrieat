@@ -29,7 +29,16 @@ grants revoked; authenticated has select-only (no direct writes).
 `set_platform_staff_status`, `invite_merchant_staff`, `set_merchant_staff_status`, `create_driver`,
 `set_driver_status`) — server-side only, each audited to `audit_events` and notified via
 `notification_outbox` (no Resend in DB transactions). App: `lib/authz-roles.ts` (pure, tested),
-`lib/authz.ts` (server), and `accept_pending_invites` wired into the post-login account hook.
+`lib/authz.ts` (server), and `accept_pending_invites` wired into the **shared auth callback**
+(`app/auth/callback`) so it runs on **every** authenticated sign-in — marketplace merchants/drivers/
+staff never need to visit `/account`; failure is logged and never corrupts the session; the
+`/account` call remains an optional idempotent fallback.
+
+**Notification model (terminology, for Wave 1D):** `notification_outbox` here is a **transport/
+delivery queue stub** (channel dispatch + retry state) — **not** the canonical notification history.
+Wave 1D adds/completes, additively (no rename/drop of the live table): **`notification_events`** =
+canonical business notification/event record; **`notification_outbox`** = channel delivery queue +
+retry state. Identity operations currently enqueue to the outbox stub as a clean seam.
 
 **Bootstrap result (both approved emails):** `abidoyedimeji@gmail.com` **exists** → seeded
 `super_admin` directly; `info@oladimejisultan.org` **absent** → pending `platform_admin` invite,

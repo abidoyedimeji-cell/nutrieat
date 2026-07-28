@@ -48,10 +48,14 @@ merchant transfer · Stripe fee · cashback · points. Cash-valued entries and n
 platform revenue.
 
 ### Wave 1D — Notification service
-Build a reusable **event → notification** layer: `notification_events` (recipient · channel ·
-template · payload · status · attempts · idempotency key · scheduled time · sent time · failure
-reason). Business logic **emits an event** (e.g. `merchant_order_ready`); it never contains
-Resend-specific sending logic scattered everywhere.
+Build a reusable **event → notification** layer as **two additive tables** (Wave 1A already shipped
+the `notification_outbox` stub — extend, never rename/drop):
+- **`notification_events`** — the canonical business notification/event record (recipient · channel ·
+  template · payload · idempotency key · created time).
+- **`notification_outbox`** — the channel **delivery queue + retry state** (status · attempts ·
+  scheduled time · sent time · failure reason).
+Business logic **emits an event** (e.g. `merchant_order_ready`); it never contains Resend-specific
+sending logic scattered everywhere.
 **Gate:** replaying an event does not send duplicate customer/merchant messages.
 
 ### Wave 1E — Payment idempotency
