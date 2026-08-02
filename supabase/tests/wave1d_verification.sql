@@ -60,6 +60,69 @@ insert into _t values
  (13,'auth_truncate_outbox_denied', has_table_privilege('authenticated','notification_outbox','truncate')::text,'false'),
  (14,'anon_select_events_denied', has_table_privilege('anon','notification_events','select')::text,'false');
 
+-- ---- PR2: enqueue service, preferences, templates, invite integration ----
+insert into auth.users(id,email) values
+ ('11111111-1111-1111-1111-111111111111','u1@x.com'),
+ ('22222222-2222-2222-2222-222222222222',null),
+ ('33333333-3333-3333-3333-333333333333','existing@x.com');
+insert into merchants(id,name,slug,status) values
+ ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','M1','m1','active'),
+ ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','M2','m2','active');
+insert into notification_template_registry(template_key,template_version,event_type,category,audience_type,default_channels,required_payload_keys)
+values ('promo_test',1,'promo.test','marketing','user',array['email','in_app']::notification_channel[],'{}');
+do $$
+declare e1 uuid; e1b uuid; e2 uuid; e3 uuid;
+begin
+  e1 := enqueue_notification('platform_staff.granted','platform_staff_granted',1,'platform','security','platform_staff',
+        p_recipient_user_id=>'11111111-1111-1111-1111-111111111111', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'K1');
+  insert into _t values
+   (20,'enqueue_event_created',(select count(*)::text from notification_events where id=e1),'1'),
+   (21,'one_event_email_and_in_app',(select count(*)::text from notification_outbox where notification_event_id=e1),'2');
+  e1b := enqueue_notification('platform_staff.granted','platform_staff_granted',1,'platform','security','platform_staff',
+        p_recipient_user_id=>'11111111-1111-1111-1111-111111111111', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'K1');
+  insert into _t values
+   (22,'retry_one_event',(case when e1b=e1 then 'same' else 'DUP' end),'same'),
+   (23,'no_duplicate_outbox',(select count(*)::text from notification_outbox where notification_event_id=e1),'2');
+  begin perform enqueue_notification('platform_staff.granted','platform_staff_granted',1,'platform','security','platform_staff',
+        p_recipient_user_id=>'11111111-1111-1111-1111-111111111111', p_payload=>'{"role":"super_admin"}', p_idempotency_key=>'K1');
+    insert into _t values(24,'conflict_payload_fails','ALLOWED','blocked');
+  exception when others then insert into _t values(24,'conflict_payload_fails','blocked','blocked'); end;
+  begin perform enqueue_notification('platform_staff.granted','platform_staff_granted',1,'platform','security','platform_staff',
+        p_recipient_user_id=>'11111111-1111-1111-1111-111111111111', p_payload=>'{}', p_idempotency_key=>'K8');
+    insert into _t values(25,'missing_required_fails','ALLOWED','blocked');
+  exception when others then insert into _t values(25,'missing_required_fails','blocked','blocked'); end;
+  begin perform enqueue_notification('platform_staff.granted','platform_staff_granted',1,'platform','security','platform_staff',
+        p_recipient_user_id=>'22222222-2222-2222-2222-222222222222', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'K10');
+    insert into _t values(26,'required_no_address_fails','ALLOWED','blocked');
+  exception when others then insert into _t values(26,'required_no_address_fails','blocked','blocked'); end;
+  insert into notification_preferences(user_id,category,channel,enabled) values ('11111111-1111-1111-1111-111111111111','marketing','email',false);
+  e2 := enqueue_notification('promo.test','promo_test',1,'platform','marketing','user',
+        p_recipient_user_id=>'11111111-1111-1111-1111-111111111111', p_recipient_email=>'u1@x.com', p_idempotency_key=>'KP1');
+  insert into _t values
+   (27,'marketing_email_suppressed',(select count(*)::text from notification_outbox where notification_event_id=e2 and channel='email'),'0'),
+   (28,'marketing_in_app_kept',(select count(*)::text from notification_outbox where notification_event_id=e2 and channel='in_app'),'1');
+  e3 := enqueue_notification('platform_staff.granted','platform_staff_granted',1,'platform','security','platform_staff',
+        p_recipient_user_id=>'11111111-1111-1111-1111-111111111111', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'K12');
+  insert into notification_suppressions(recipient_email,channel,reason) values ('u1@x.com','email','bounce');
+  insert into _t values(29,'required_not_suppressed',(select count(*)::text from notification_outbox where notification_event_id=e3 and channel='email'),'1');
+end $$;
+do $$ declare r text; ev uuid;
+begin
+  r := _grant_or_invite_platform('brandnew@x.com','platform_admin');
+  select id into ev from notification_events where event_type='platform_staff.invited' and recipient_email='brandnew@x.com' order by created_at desc limit 1;
+  insert into _t values
+   (30,'invite_creates_event',(ev is not null)::text,'true'),
+   (31,'invite_creates_email_delivery',(select count(*)::text from notification_outbox where notification_event_id=ev and channel='email'),'1');
+end $$;
+insert into merchant_staff(merchant_id,user_id,role,status) values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','33333333-3333-3333-3333-333333333333','merchant_admin','active');
+select set_config('request.jwt.claims','{"sub":"33333333-3333-3333-3333-333333333333","role":"authenticated"}',true);
+do $$ begin begin perform invite_merchant_staff('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','x@y.com','merchant_admin');
+  insert into _t values(32,'merchant_cross_invite_forbidden','ALLOWED','forbidden');
+exception when others then insert into _t values(32,'merchant_cross_invite_forbidden','forbidden','forbidden'); end; end $$;
+select set_config('request.jwt.claims',null,true);
+insert into _t values
+ (33,'enqueue_not_authexec', has_function_privilege('authenticated','enqueue_notification(text, text, int, product_context, notification_category, notification_audience, uuid, uuid, uuid, text, jsonb, notification_channel[], notification_priority, text, uuid, text, uuid, text, text, text, text, timestamptz, audit_actor_type, uuid, text)','execute')::text,'false');
+
 -- FAILING ROWS ONLY — empty result == PASS.
 select seq, name, got, want from _t where got is distinct from want order by seq;
 rollback;
