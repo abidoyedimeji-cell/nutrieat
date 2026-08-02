@@ -28,6 +28,18 @@ summed with cash, converted, or given a pound value; new cashback is cash and ne
 Reads are role-scoped (customer/merchant/support/operations/finance) and return computed balances only.
 Full model: [`MONEY-MODEL.md`](./MONEY-MODEL.md).
 
+**Notifications (Platform Wave 1D — built).** One reusable pipeline replaces scattered sending:
+**business event → delivery outbox → provider adapter → delivery-status feedback**. Two separate
+concepts — `notification_events` (immutable business intent) and `notification_outbox` (channel delivery
+queue) — plus append-only delivery attempts, an in-app inbox, preferences, suppression, and webhook
+dedupe. The single write path `enqueue_notification` validates the template + payload, creates the event
+exactly-once by idempotency key, gates optional categories by preference/suppression (required service
+comms are never suppressed), and audits in the same transaction. A leased dispatcher (Vercel Cron →
+secret-gated route) renders code-owned templates and sends via a Resend adapter with a deterministic
+provider idempotency key; a signed Svix webhook feeds delivery status back (deduped, out-of-order safe;
+bounce/complaint create suppression). The database remains authoritative for deduplication. Full model:
+[`NOTIFICATIONS.md`](./NOTIFICATIONS.md).
+
 ---
 
 ## 1. Route map

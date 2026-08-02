@@ -72,7 +72,24 @@ refund 500; platform-liability £5 → merchant unchanged, platform absorbs 500)
 `supabase/tests/wave1c1_verification.sql`; matrix in `WAVE-1C1-REQUIREMENTS-MATRIX.md`.
 **Do not begin Wave 1D automatically — awaiting review.**
 
-### Wave 1D — Notification service
+### Wave 1D — Notification service ✅ COMPLETE (additive migrations 0023–0028; four stacked PRs)
+Delivered the reusable **business event → delivery outbox → provider adapter → delivery-status feedback**
+pipeline. `notification_events` (immutable intent) + the extended `notification_outbox` (delivery queue)
++ append-only `notification_delivery_attempts` + `notification_inbox` (in-app) + preferences +
+suppression + webhook dedupe. Canonical `enqueue_notification` (exactly-once event, template + payload
+validation, required-vs-optional gating, audit-in-transaction, internal-only); leased dispatcher
+(`SKIP LOCKED`, reclaim abandoned leases, bounded backoff, dead-letter); Resend adapter (deterministic
+provider idempotency key) + signed Svix webhook (dedupe + out-of-order safe, bounce/complaint
+suppression); Vercel Cron → secret-gated dispatch (no public send endpoint). Staff/merchant invitations
+are the first consumer; Cookbook flows unchanged (documented migration plan); the 2 legacy outbox rows
+preserved + quarantined. The DB remains the source of deduplication (no universal exactly-once claim).
+**Gate — PASSED:** replaying an event/webhook does not create duplicate visible notifications; required
+comms never silently suppressed. Verification `supabase/tests/wave1d_verification.sql`; details
+`NOTIFICATIONS.md`; matrix `WAVE-1D-REQUIREMENTS-MATRIX.md`. **Do not begin Wave 1E automatically —
+awaiting review.**
+
+<details><summary>Original Wave 1D plan (delivered)</summary>
+
 Build a reusable **event → notification** layer as **two additive tables** (Wave 1A already shipped
 the `notification_outbox` stub — extend, never rename/drop):
 - **`notification_events`** — the canonical business notification/event record (recipient · channel ·
@@ -82,6 +99,7 @@ the `notification_outbox` stub — extend, never rename/drop):
 Business logic **emits an event** (e.g. `merchant_order_ready`); it never contains Resend-specific
 sending logic scattered everywhere.
 **Gate:** replaying an event does not send duplicate customer/merchant messages.
+</details>
 
 ### Wave 1E — Payment idempotency
 Build a marketplace event ledger on the proven cookbook pattern: `stripe_event_id` uniqueness ·

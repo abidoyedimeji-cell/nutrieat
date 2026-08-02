@@ -178,6 +178,53 @@ insert into _t values
  (113,'record_not_authexec', has_function_privilege('authenticated','record_notification_result(uuid,text,notification_attempt_result,text,text,text,text,text,int)','execute')::text,'false'),
  (114,'webhook_fn_not_authexec', has_function_privilege('authenticated','process_notification_webhook(text,text,text,text,timestamptz)','execute')::text,'false');
 
+-- ---- PR4: permanent failure, manual retry, delayed/failed states, complaint, oversized payload ----
+insert into auth.users(id,email) values ('55555555-5555-5555-5555-555555555555','admin@x.com');
+insert into platform_staff(user_id,role) values ('55555555-5555-5555-5555-555555555555','super_admin');
+do $$
+declare ev1 uuid; ev2 uuid; ev3 uuid; ob1 uuid; ob2 uuid; ob3 uuid; st notification_delivery_status; r1 text; r2 text;
+begin
+  ev1 := enqueue_notification('platform_staff.invited','platform_staff_invited',1,'platform','security','external_email', p_recipient_email=>'perm@x.com', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'P4_1');
+  select id into ob1 from notification_outbox where notification_event_id=ev1;
+  perform claim_notification_batch('w1',10);
+  st := record_notification_result(ob1,'w1','permanent_error','resend',null,'422','invalid');
+  insert into _t values (120,'permanent_failed', st::text,'permanently_failed');
+  -- manual retry (super_admin): re-queues, idempotent, audited (calls SEQUENCED before the audit read)
+  perform set_config('request.jwt.claims','{"sub":"55555555-5555-5555-5555-555555555555","role":"authenticated"}',true);
+  r1 := retry_notification_delivery(ob1);
+  r2 := retry_notification_delivery(ob1);
+  perform set_config('request.jwt.claims', null, true);
+  insert into _t values
+   (121,'manual_retry_requeues', r1,'queued'),
+   (122,'manual_retry_idempotent', r2,'queued'),
+   (123,'manual_retry_audited',(select (count(*)>0)::text from audit_events where action='notification_delivery.retried' and entity_id=ob1 and reason_code='manual_retry'),'true');
+  -- delayed then failed state via webhook
+  ev2 := enqueue_notification('platform_staff.invited','platform_staff_invited',1,'platform','security','external_email', p_recipient_email=>'dly@x.com', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'P4_2');
+  select id into ob2 from notification_outbox where notification_event_id=ev2;
+  update notification_outbox set provider='resend', provider_message_id='msg_p4_2', delivery_status='provider_accepted' where id=ob2;
+  perform process_notification_webhook('resend','wh_p4_dly','email.delivery_delayed','msg_p4_2', now());
+  insert into _t values (125,'delayed_applied', (select delivery_status::text from notification_outbox where id=ob2),'delayed');
+  perform process_notification_webhook('resend','wh_p4_fail','email.failed','msg_p4_2', now());
+  insert into _t values (127,'failed_applied', (select delivery_status::text from notification_outbox where id=ob2),'permanently_failed');
+  -- complaint -> suppression
+  ev3 := enqueue_notification('platform_staff.invited','platform_staff_invited',1,'platform','security','external_email', p_recipient_email=>'cmp@x.com', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'P4_3');
+  select id into ob3 from notification_outbox where notification_event_id=ev3;
+  update notification_outbox set provider='resend', provider_message_id='msg_p4_3', delivery_status='provider_accepted' where id=ob3;
+  perform process_notification_webhook('resend','wh_p4_cmp','email.complained','msg_p4_3', now());
+  insert into _t values
+   (128,'complaint_state',(select delivery_status::text from notification_outbox where id=ob3),'complained'),
+   (129,'complaint_suppression',(select count(*)::text from notification_suppressions where lower(recipient_email)='cmp@x.com' and reason='complaint'),'1');
+  -- oversized payload rejected atomically
+  begin perform enqueue_notification('promo.test','promo_test',1,'platform','marketing','user',
+    p_recipient_user_id=>'55555555-5555-5555-5555-555555555555', p_recipient_email=>'admin@x.com',
+    p_payload=> jsonb_build_object('big', repeat('x', 20000)), p_idempotency_key=>'P4_BIG');
+    insert into _t values (130,'oversized_payload_rejected','ALLOWED','blocked');
+  exception when others then insert into _t values (130,'oversized_payload_rejected','blocked','blocked'); end;
+end $$;
+select set_config('request.jwt.claims','{"sub":"55555555-5555-5555-5555-555555555555","role":"authenticated"}',true);
+insert into _t values (131,'ops_summary_runs',(select (queued is not null)::text from get_notification_operational_summary()),'true');
+select set_config('request.jwt.claims',null,true);
+
 -- FAILING ROWS ONLY — empty result == PASS.
 select seq, name, got, want from _t where got is distinct from want order by seq;
 rollback;

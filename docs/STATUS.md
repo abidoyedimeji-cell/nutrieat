@@ -30,7 +30,16 @@ for the technical design, [`COOKBOOK-CONTENT.md`](./COOKBOOK-CONTENT.md) for con
 > financial ledger; available excludes pending), and role-scoped safe reads
 > (customer/merchant/support/operations/finance) proven with simulated-role tests. Matrix in
 > [`WAVE-1C1-REQUIREMENTS-MATRIX.md`](./WAVE-1C1-REQUIREMENTS-MATRIX.md).
-> Marketplace backbone continues per the wave plan; **Wave 1D (Notifications) awaits review** (not started).
+> **Platform Wave 1D (Canonical Notification Service) — ✅ COMPLETE** (additive migrations 0023–0028;
+> 0017–0022 unchanged; four stacked PRs merged). One reusable pipeline — business event
+> (`notification_events`) → delivery outbox (`notification_outbox`) → provider adapter (Resend) →
+> delivery-status feedback (signed webhook) — with append-only attempts, preferences, suppression, and an
+> in-app channel. Canonical `enqueue_notification` (exactly-once event, template + payload validation,
+> required-vs-optional gating, audit-in-transaction, internal-only); leased dispatcher with retry/backoff/
+> dead-letter; staff/merchant invitations are the first consumer. The 2 legacy outbox rows are preserved +
+> quarantined. Cookbook email flows are unchanged (documented migration plan). Details in
+> [`NOTIFICATIONS.md`](./NOTIFICATIONS.md); matrix in [`WAVE-1D-REQUIREMENTS-MATRIX.md`](./WAVE-1D-REQUIREMENTS-MATRIX.md).
+> Marketplace backbone continues per the wave plan; **Wave 1E awaits review** (not started).
 
 ## Overall: ~55% — execution underway
 
