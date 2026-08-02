@@ -69,7 +69,8 @@ begin
    (1,'s1_commission_revenue',(select coalesce(sum(amount_cents) filter(where direction='credit'),0)::text from financial_postings where account_id=a_comm and journal_id=any(s1)),'1200'),
    (2,'s1_stripe_fee_expense',(select coalesce(sum(amount_cents) filter(where direction='debit'),0)::text from financial_postings where account_id=a_feeexp and journal_id=any(s1)),'200'),
    (3,'s1_merchant_payable_net_after_transfer',(select (coalesce(sum(amount_cents) filter(where direction='credit'),0)-coalesce(sum(amount_cents) filter(where direction='debit'),0))::text from financial_postings where account_id=m1 and journal_id=any(s1)),'0'),
-   -- stripe_clearing residual is a DEBIT balance (net income position) — NEVER labelled revenue
+   -- stripe_clearing residual is a DEBIT asset/clearing balance — NOT revenue and NOT net income itself
+   -- (net income = commission 1200 - stripe fee 200; the clearing balance only coincidentally equals it here)
    (4,'s1_clearing_debit_residual_not_revenue',(select (coalesce(sum(amount_cents) filter(where direction='debit'),0)-coalesce(sum(amount_cents) filter(where direction='credit'),0))::text from financial_postings where account_id=a_clear and journal_id=any(s1)),'1000'),
    (5,'s1_net_platform_income',((1200-200))::text,'1000');
 

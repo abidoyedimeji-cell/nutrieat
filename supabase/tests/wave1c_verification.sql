@@ -46,7 +46,7 @@ begin
   insert into _p values('merchant_payable_net', (select (coalesce(sum(amount_cents) filter (where direction='credit'),0)-coalesce(sum(amount_cents) filter (where direction='debit'),0))::text from financial_postings where account_id=a_mpay));  -- 0
   insert into _p values('commission_revenue', (select coalesce(sum(amount_cents) filter (where direction='credit'),0)::text from financial_postings where account_id=a_comm));  -- 1200
   insert into _p values('stripe_fee_expense', (select coalesce(sum(amount_cents) filter (where direction='debit'),0)::text from financial_postings where account_id=a_feeexp));  -- 200
-  insert into _p values('clearing_debit_residual', (select (coalesce(sum(amount_cents) filter (where direction='debit'),0)-coalesce(sum(amount_cents) filter (where direction='credit'),0))::text from financial_postings where account_id=a_clear));  -- 1000 DEBIT = net income (commission 1200 - stripe fee 200); NOT revenue
+  insert into _p values('clearing_debit_residual', (select (coalesce(sum(amount_cents) filter (where direction='debit'),0)-coalesce(sum(amount_cents) filter (where direction='credit'),0))::text from financial_postings where account_id=a_clear));  -- 1000 DEBIT asset/clearing balance; NOT revenue and NOT net income itself (net income = commission 1200 - stripe fee 200 = 1000, coincidentally equal here)
   -- idempotent
   insert into _p values('idempotent', (case when post_financial_journal('farmers_market','fm.customer_charge',
       jsonb_build_array(jsonb_build_object('account_id',a_clear,'direction','debit','amount_cents',10000),

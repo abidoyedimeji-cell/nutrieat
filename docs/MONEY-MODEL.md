@@ -59,9 +59,12 @@ J2 fm.stripe_fee       : Dr stripe_fee_expense 200 ; Cr stripe_clearing 200
 J3 fm.merchant_transfer: Dr merchant_payable 8800 ; Cr stripe_clearing 8800
 ```
 Reconciliation: charge 10000 = merchant 8800 + commission 1200 (88/12); merchant_payable nets to **0**
-after transfer; the residual left in `stripe_clearing` is a **DEBIT balance of 1000** — a net-income
-*position* (commission 1200 − stripe fee 200), **NOT revenue** (a Stripe-clearing balance is never
-labelled revenue). Net platform income = **1000**.
+after transfer; the residual left in `stripe_clearing` is a **DEBIT balance of 1000** — an **asset /
+clearing balance** (funds held at the processor), **not revenue and not net income itself**. Net
+platform income is a separate income-statement figure: **commission 1200 − stripe fee 200 = 1000**; in
+this closed single-order example the Stripe-clearing balance happens to equal it only because every
+other leg (merchant payable, refunds) has settled to zero — that equality is a reconciliation
+coincidence, not a definition.
 
 > **Correction (Wave 1C.1):** Wave 1C shipped an 80/20 split (merchant 8000 / platform 2000 = 20%),
 > which conflicts with the locked 12% commission. All SQL, fixtures, tests, and docs were corrected to

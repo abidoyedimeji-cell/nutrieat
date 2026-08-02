@@ -61,7 +61,8 @@ Proven live: a £100 order reconciles exactly. Money model in `MONEY-MODEL.md`; 
 **Wave 1C.1 closeout ✅ COMPLETE (additive migrations 0018–0022; 0017 frozen; three stacked PRs A→B→C
 merged normally).** Corrected the commission to the locked **12%** — a £100 order splits **88/12**
 (merchant 8800 / **commission** 1200), not the earlier 80/20; the residual in `stripe_clearing` is a
-DEBIT/net-income position, **never revenue**. Added the canonical `reverse_financial_journal`;
+DEBIT **asset/clearing balance — not revenue and not net income itself** (net income = commission −
+stripe fee, an income-statement figure). Added the canonical `reverse_financial_journal`;
 customer-credit issue/consume/reverse + the cashback value-movement primitive (per-classification,
 negative-balance protected, internal-only — a customer cannot issue their own credit); `reward_ledger`
 points-authority separation (new cashback → financial ledger; available points exclude pending) and

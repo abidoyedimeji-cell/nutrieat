@@ -14,8 +14,10 @@ Correction-and-completion of Wave 1C.
   platform 2000) that conflicted with the locked Farmers Market scheduled-delivery commission of **12%**.
   Corrected to **88/12** everywhere (SQL fixtures, `test/money.test.ts`, `lib/money.ts`, `MONEY-MODEL.md`),
   and the 12% now lands in `platform_commission_revenue`, not `platform_fee_revenue`. The residual left
-  in `stripe_clearing` after the merchant transfer is a **DEBIT balance (net-income position), never
-  revenue**. Distinguished **commission** (% of merchant gross) from **platform fee revenue** (flat
+  in `stripe_clearing` after the merchant transfer is a **DEBIT balance — an asset/clearing balance,
+  not revenue and not net income itself** (net income = commission 1200 − stripe fee 200 = 1000, an
+  income-statement figure the clearing balance only coincidentally equals once all legs settle).
+  Distinguished **commission** (% of merchant gross) from **platform fee revenue** (flat
   service charges).
 - **PR A (0018/0019):** additive chart kinds (`customer_general/refund/promotional_credit_liability`,
   `platform_operating_expense`); canonical `reverse_financial_journal` (exact-opposite journal, linked by
