@@ -123,6 +123,61 @@ select set_config('request.jwt.claims',null,true);
 insert into _t values
  (33,'enqueue_not_authexec', has_function_privilege('authenticated','enqueue_notification(text, text, int, product_context, notification_category, notification_audience, uuid, uuid, uuid, text, jsonb, notification_channel[], notification_priority, text, uuid, text, uuid, text, text, text, text, timestamptz, audit_actor_type, uuid, text)','execute')::text,'false');
 
+-- ---- PR3: dispatcher, delivery feedback, in-app ----
+do $$
+declare ev_a uuid; ev_c uuid; ev_d uuid; ev_e uuid; ev_f uuid;
+        ob_a uuid; ob_ci uuid; ob_d uuid; ob_e uuid; ob_f uuid; st notification_delivery_status; r text;
+begin
+  ev_a := enqueue_notification('platform_staff.invited','platform_staff_invited',1,'platform','security','external_email', p_recipient_email=>'da@x.com', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'P3_A');
+  ev_c := enqueue_notification('platform_staff.granted','platform_staff_granted',1,'platform','security','platform_staff', p_recipient_user_id=>'11111111-1111-1111-1111-111111111111', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'P3_C');
+  ev_d := enqueue_notification('platform_staff.invited','platform_staff_invited',1,'platform','security','external_email', p_recipient_email=>'dd@x.com', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'P3_D');
+  ev_e := enqueue_notification('platform_staff.invited','platform_staff_invited',1,'platform','security','external_email', p_recipient_email=>'de@x.com', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'P3_E');
+  ev_f := enqueue_notification('platform_staff.invited','platform_staff_invited',1,'platform','security','external_email', p_recipient_email=>'df@x.com', p_payload=>'{"role":"platform_admin"}', p_idempotency_key=>'P3_F');
+  select id into ob_d from notification_outbox where notification_event_id=ev_d; update notification_outbox set max_attempts=1 where id=ob_d;
+  select id into ob_f from notification_outbox where notification_event_id=ev_f; update notification_outbox set next_attempt_at=now()+interval '1 hour' where id=ob_f;
+  perform claim_notification_batch('w1',50);
+  insert into _t values (34,'claim_excludes_not_due',(select delivery_status::text from notification_outbox where id=ob_f),'queued');
+  insert into _t values (35,'no_double_claim',(select count(*)::text from claim_notification_batch('w2',50)),'0');
+  select id into ob_a from notification_outbox where notification_event_id=ev_a;
+  select id into ob_ci from notification_outbox where notification_event_id=ev_c and channel='in_app';
+  select id into ob_e from notification_outbox where notification_event_id=ev_e;
+  st := record_notification_result(ob_a,'w1','success','resend','msg_p3a');
+  insert into _t values
+   (36,'success_provider_accepted', st::text,'provider_accepted'),
+   (37,'success_message_id',(select provider_message_id from notification_outbox where id=ob_a),'msg_p3a'),
+   (38,'attempt_appended',(select count(*)::text from notification_delivery_attempts where outbox_id=ob_a),'1');
+  st := record_notification_result(ob_e,'w1','retryable_error','resend',null,'429','rate');
+  insert into _t values (39,'retryable_reschedules', st::text,'retry_scheduled');
+  st := record_notification_result(ob_d,'w1','retryable_error','resend',null,'500','srv');
+  insert into _t values (100,'exhausted_dead_letter', st::text,'dead_letter');
+  st := deliver_in_app_notification(ob_ci,'w1','Access granted','role granted','/admin');
+  insert into _t values (101,'in_app_delivered', st::text,'delivered'), (102,'inbox_created',(select count(*)::text from notification_inbox where outbox_id=ob_ci),'1');
+  -- webhook (sequenced)
+  r := process_notification_webhook('resend','wh_p3a','email.delivered','msg_p3a', now());
+  insert into _t values (103,'webhook_delivered',(select delivery_status::text from notification_outbox where id=ob_a),'delivered');
+  insert into _t values (104,'webhook_duplicate', process_notification_webhook('resend','wh_p3a','email.delivered','msg_p3a', now()),'duplicate');
+  r := process_notification_webhook('resend','wh_p3b','email.sent','msg_p3a', now());
+  insert into _t values (105,'out_of_order_ignored', r,'ignored'), (106,'no_state_regress',(select delivery_status::text from notification_outbox where id=ob_a),'delivered');
+  -- abandoned lease reclaimed
+  update notification_outbox set delivery_status='processing', worker_id='dead', lock_expires_at=now()-interval '1 min' where id=ob_e;
+  insert into _t values (107,'abandoned_lease_reclaimed',(select count(*)::text from claim_notification_batch('w3',50) where outbox_id=ob_e),'1');
+  -- bounce/complaint suppression
+  update notification_outbox set provider_message_id='msg_p3d', delivery_status='provider_accepted' where id=ob_d;
+  perform process_notification_webhook('resend','wh_bounce','email.bounced','msg_p3d', now());
+  insert into _t values
+   (108,'bounce_state',(select delivery_status::text from notification_outbox where id=ob_d),'bounced'),
+   (109,'bounce_suppression',(select count(*)::text from notification_suppressions where lower(recipient_email)='dd@x.com' and reason='bounce'),'1');
+end $$;
+select set_config('request.jwt.claims','{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',true);
+insert into _t values (110,'u1_sees_own_inapp',(select count(*)::text from get_my_notifications(30,null)),'1');
+select set_config('request.jwt.claims','{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',true);
+insert into _t values (111,'other_user_sees_none',(select count(*)::text from get_my_notifications(30,null)),'0');
+select set_config('request.jwt.claims',null,true);
+insert into _t values
+ (112,'claim_not_authexec', has_function_privilege('authenticated','claim_notification_batch(text,int,int)','execute')::text,'false'),
+ (113,'record_not_authexec', has_function_privilege('authenticated','record_notification_result(uuid,text,notification_attempt_result,text,text,text,text,text,int)','execute')::text,'false'),
+ (114,'webhook_fn_not_authexec', has_function_privilege('authenticated','process_notification_webhook(text,text,text,text,timestamptz)','execute')::text,'false');
+
 -- FAILING ROWS ONLY — empty result == PASS.
 select seq, name, got, want from _t where got is distinct from want order by seq;
 rollback;
