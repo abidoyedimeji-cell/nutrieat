@@ -4,6 +4,47 @@ Engineering journal. Newest first. Each entry: what shipped, key decisions, issu
 
 ---
 
+## Platform Wave 1D — Canonical Notification Service ✅
+**Status:** additive migrations `0023`–`0028` applied to live Supabase · four stacked PRs (PR1→PR4)
+merged normally · SQL verification + 43 JS tests + typecheck + build pass · no production email sent.
+
+One reusable pipeline replacing scattered sending: **business event → delivery outbox → provider adapter
+→ delivery-status feedback**, for cookbook, Farmers Market, platform admin and future products.
+
+- **Preflight:** repaired the migration-history discrepancy (remote `0020a` → `0021`, metadata only, no
+  schema rerun) and corrected the Stripe-clearing wording (asset/clearing balance, not revenue/net
+  income). Full audit + gap report in `docs/NOTIFICATIONS.md`.
+- **Two separate concepts:** `notification_events` (immutable business INTENT) and `notification_outbox`
+  (channel-specific delivery queue), plus append-only `notification_delivery_attempts`, `notification_inbox`
+  (in-app), `notification_preferences`, `notification_suppressions`, `notification_provider_events`
+  (webhook dedupe). Never collapsed into one table.
+- **PR1 (0023):** additive schema; outbox extended (not dropped/renamed); the 2 legacy bootstrap outbox
+  rows preserved + quarantined so the dispatcher can never send them; RLS deny-by-default + stray-grant
+  cleanup.
+- **PR2 (0024):** `enqueue_notification` — the single canonical write path (template + payload validation,
+  exactly-once event by idempotency key, preferences/suppression for optional categories only, audit +
+  event + outbox in one transaction, internal-only). Code-owned template registry. Staff/merchant invites
+  repointed to it (first consumer), behaviour + cross-merchant isolation preserved.
+- **PR3 (0025–0028):** leased dispatcher (`SKIP LOCKED`, reclaim abandoned leases), bounded backoff,
+  dead-letter, Resend adapter (deterministic provider idempotency key, classified errors), signed Svix
+  webhook (dedupe + out-of-order safe, bounce/complaint suppression), in-app channel + own-only reads,
+  operational summaries. Vercel Cron → secret-gated dispatch route (no public send endpoint).
+- **PR4:** requirements→tests matrix (54 checks), full SQL verification, provider-mock + signature tests,
+  notification architecture docs, template catalogue, direct-Resend migration inventory, retention/privacy
+  guidance.
+
+Delivery semantics are honest: exactly-once event + outbox creation, safe at-least-once worker processing,
+provider idempotency as an additional defence — **the database remains the source of deduplication**. No
+universal exactly-once claim.
+
+**Issues / resolved**
+- `notification_provider_events` is append-only, so the webhook set `outbox_id` at INSERT time (not a
+  post-insert UPDATE) and enum-cast the suppression reason (`0026`/`0027`).
+- The dispatcher's abandoned-lease recovery originally skipped stuck `processing` rows; `0028` reclaims a
+  crashed worker's `processing` row once its lease expires.
+
+---
+
 ## Platform Wave 1C.1 — Money & Ledger Closeout ✅
 **Status:** additive migrations `0018`–`0022` applied to live Supabase · `0017` frozen/unchanged ·
 three stacked PRs (A→B→C) merged normally · SQL verification + 30 JS tests + typecheck + build pass.

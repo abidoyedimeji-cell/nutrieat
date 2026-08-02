@@ -73,3 +73,92 @@ shim.
 
 *(Compliance note: final unsubscribe/suppression policy wording requires legal/privacy review; this wave
 implements the mechanism, not the legal policy.)*
+
+---
+
+# Architecture (as built)
+
+```
+business RPC (e.g. invite_merchant_staff)
+  └─ enqueue_notification(...)                      [single canonical write path, SECURITY DEFINER]
+       ├─ validate template + required payload keys (atomic)
+       ├─ exactly-once event by idempotency_key
+       ├─ record_audit_event('notification_event.created')   [same transaction]
+       ├─ INSERT notification_events                          [immutable business intent]
+       └─ per permitted channel/recipient:
+            INSERT notification_outbox (delivery_status='queued')   [preferences/suppression gate optional only]
+
+Vercel Cron (*/5)  → /api/notifications/dispatch  [secret-gated, service role]
+  └─ dispatchNotifications(worker)
+       ├─ claim_notification_batch (lease, SKIP LOCKED, reclaim abandoned)
+       ├─ render (code-owned template registry)
+       ├─ email → Resend adapter (deterministic idempotency key)   |  in_app → deliver_in_app_notification
+       └─ record_notification_result (attempt + state + backoff/dead-letter)
+
+Resend → /api/notifications/resend-webhook  [Svix signature, raw body]
+  └─ process_notification_webhook (dedupe by svix-id, valid transitions only, out-of-order safe)
+       └─ bounce/complaint → notification_suppressions (optional email only)
+```
+
+**Tables:** `notification_events` (intent, immutable) · `notification_outbox` (delivery queue) ·
+`notification_delivery_attempts` (append-only history) · `notification_inbox` (in-app projection) ·
+`notification_preferences` · `notification_suppressions` · `notification_provider_events` (webhook
+dedupe) · `notification_template_registry` (validation metadata).
+
+**Delivery states** distinguish provider vs worker state: `queued · processing · provider_accepted ·
+delivered · delayed · retry_scheduled · permanently_failed · bounced · complained · cancelled ·
+dead_letter · quarantined`.
+
+# Template catalogue (code-owned — `lib/notifications/templates.ts`)
+
+Rendering (subject/text/HTML/in-app) lives in code; the DB registry holds only validation metadata.
+Keys/versions/required-keys are kept in lockstep between the two.
+
+| Key@version | Event | Category | Audience | Channels | Required payload |
+|---|---|---|---|---|---|
+| `platform_staff_granted@1` | `platform_staff.granted` | security | platform_staff | email, in_app | `role` |
+| `platform_staff_invited@1` | `platform_staff.invited` | security | external_email | email | `role` |
+| `merchant_staff_granted@1` | `merchant_staff.granted` | security | merchant_staff | email, in_app | `merchant_id, role` |
+| `merchant_staff_invited@1` | `merchant_staff.invited` | security | external_email | email | `merchant_id, role` |
+
+Each template also declares a `replyTo` policy (`support`), non-sensitive provider `tags`, and a test
+`fixture`. Arbitrary DB HTML can never be sent — only registered code renderers.
+
+# Direct-Resend migration inventory & plan
+
+All email currently flows through `lib/email.ts` (the only Resend integration). Wave 1D did **not**
+migrate the Cookbook flows — customer-facing behaviour is unchanged. Inventory:
+
+| `lib/email.ts` function | Caller | Status after Wave 1D | Migration plan |
+|---|---|---|---|
+| `sendWelcomeEmail` | `app/api/leads/route.ts` (early-access) | unchanged (direct) | later: `enqueue_notification('cookbook.welcome', …)` |
+| `sendOrderConfirmation` | `app/api/stripe/webhook/route.ts` | unchanged (direct) | later: enqueue `cookbook.order_confirmation` |
+| `sendRefundConfirmation` | (defined; no caller yet) | unchanged | later: enqueue `cookbook.refund` |
+| `sendPdfReleaseEmail` | (defined; no caller yet) | unchanged | later: enqueue `cookbook.pdf_release` |
+
+**First consumer migrated:** platform + merchant staff invitations now flow through the canonical
+service (event → outbox → adapter → attempt/status). Migrating the four Cookbook templates is a bounded
+follow-up: add each to the code + DB registries, replace the direct `lib/email.ts` call with an
+`enqueue_notification` call, and keep `lib/email.ts` as a temporary compatibility path until each flow is
+cut over. No behaviour change is required in this wave.
+
+# Retention & privacy guidance
+
+- **Events** are the longest-retained (audit/dispute) alongside financial/audit history; payloads are
+  size- and secret-guarded (no tokens, magic links, card data, signed URLs, or raw order/customer dumps).
+- **Attempts** store only safe error classifications/summaries — never API keys, bodies, or auth tokens.
+- **Suppressions** hold an email address + reason; a bounce/complaint suppresses future **optional**
+  email but never required account/order communications.
+- **Provider events** store the provider event id + type for dedupe; raw provider payloads are not
+  retained unless separately justified and redacted.
+- **Compliance:** this wave implements the *mechanism* (required vs optional, suppression, preferences).
+  Final unsubscribe wording, retention periods, and which messages may legally be suppressed require
+  **legal/privacy review** before public launch.
+
+# Manual operational setup (not automated)
+
+- **Resend webhook:** configure in the Resend dashboard, pointing at `/api/notifications/resend-webhook`,
+  subscribed to `email.sent/delivered/delivery_delayed/failed/bounced/complained`. Copy the signing
+  secret into `RESEND_WEBHOOK_SECRET`. Not auto-subscribed by this wave.
+- **Secrets:** set `RESEND_WEBHOOK_SECRET`, `NOTIFICATION_DISPATCH_SECRET`, and `CRON_SECRET` (Vercel
+  Cron injects the last automatically). No production/canary email is sent without explicit approval.
