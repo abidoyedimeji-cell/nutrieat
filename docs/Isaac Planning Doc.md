@@ -802,3 +802,53 @@ Key constraints represented:
 - The sample is a test fixture only, not production data and not evidence that actual locations/routes are serviceable.
 
 Use this sample to challenge the proposed lifecycle and operations UI before migrations or RPC changes. Real dispatch feasibility requires real geocoded addresses, merchant readiness times, route calculations, driver breaks/return-to-base policy, and confirmed priority-slot rules.
+
+
+---
+
+## 18. Audit — questionable logic and gaps in the sample operating week
+
+**Audit status:** Read-only review of `docs/MARKETPLACE_SAMPLE_WEEK.md` against the current marketplace planning documents. No schema or application code was changed.
+
+### Overall finding
+
+The sample week is a useful scenario fixture, but it is not yet an executable dispatch, checkout, or financial specification. Route durations are illustrative and lack a stop-by-stop time budget; booking policies are not settled; and order, item, delivery, and financial state transitions need explicit definitions. Do not derive production migrations/RPCs directly from the sample as written.
+
+### High-priority gaps
+
+1. **Route feasibility is asserted, not demonstrated.** The table assigns total workload estimates (for example 4h30) without listing travel legs, merchant service times, parking/access time, per-stop handover time, waiting, breaks, return-to-base or close-out. No live route calculation was run. Require a stop-level schedule and buffer, then validate every delivery window and five-hour shift limit.
+2. **Booking semantics remain ambiguous.** Standard delivery has a proposed minimum advance notice of two days, but order creation timestamps are absent, so compliance cannot be checked. The earlier “three-day period” is unresolved. Priority slot length, capacity, fee amount and fee unit (per order/destination) are proposed, not approved. Define how slots are held during checkout and released after payment failure/timeout.
+3. **Sample lacks a multi-merchant order.** All ten order rows name one merchant each. This does not exercise the stated requirement that a single destination/order can contain items from multiple merchants. Add at least one mixed-merchant order and specify merchant sub-orders, pickup sequence, package manifests, per-merchant commissions, multi-store handling fee, partial readiness and partial failure.
+4. **No full money calculation is shown.** Subtotals are shown but not a worked customer total or merchant payable. Define the fee order, commission basis, small-order threshold basis, priority and multi-store fee interaction, rounding in pence, VAT/tax treatment as applicable, discounts, refunds, payment provider fees, and whether commission is based on ordered, fulfilled or retained lines. Do not assume fees or commissions are final merely because the fixture uses them.
+5. **Inventory reservation and stock races are missing.** Define when stock is checked and reserved, how reservation expiry works during checkout, what happens when two customers buy the last unit, and how merchant/platform-owned inventory differs. For variable-weight goods, define estimate, final weighed amount, price cap/consent and adjustment/refund flow before allowing the product in checkout.
+6. **Order, line, fulfilment, stop and route states are not enumerated.** Write allowed transitions and actors. A payment-confirmed order can still have a line shortage; a route can finish with a failed stop; a merchant fulfilment can be ready while another is not. Avoid one global status that masks partial outcomes.
+7. **Settlement trigger and payout rules are incomplete.** “End of run/day” is a proposed operational point, not a complete rule. Specify eligible line outcomes, holds for disputes, refund offsets, idempotent transfer creation, failed/retried transfers, reconciliation and payout timing. Keep merchant payouts separate from driver compensation and route status.
+8. **Five-hour shift policy is unclear.** Does five hours mean a hard maximum on duty, productive work time, or a target? Do breaks, return-to-base, van checks and close-out count? The sample's 4h and 4h30 estimates must include the agreed definition.
+9. **No vehicle/load capacity checks.** A van reference exists, but no payload/volume/cold-chain constraints, item handling requirements, package count, loading sequence or capacity rule is modelled. Vehicle fleet administration may stay outside the MVP, but dispatch must at least know a route's assigned vehicle and avoid impossible loads.
+10. **Serviceability is assumed, not tested.** The sample gives a Dartford town-centre coordinate and ten-mile radius but no actual geocoded delivery locations. Define straight-line vs road distance, boundary inclusivity, overlapping towns, inaccessible addresses, postcode/geocoding failure, launch-area enablement and product/merchant availability. Do not present the illustrative centre coordinate as authoritative.
+11. **Collection lifecycle is under-specified.** Collection orders are excluded from driver routes, correctly, but need ready-for-collection notification, collection window, proof/handover, expiry, no-show, storage/safety, cancellation and refund rules.
+12. **Recurring-order examples are manual only.** The three saved-basket repeats are not automatic recurrence. Ensure the data model differentiates a saved basket from a placed order and stores no implied future charge. Every repeat must revalidate current price, stock, minimum spend, serviceability and booking capacity.
+
+### Medium-priority gaps
+
+13. **No explicit order-created/paid timestamps.** Without placed-at, payment-confirmed-at, slot-reserved-at, merchant-ready-by and promised-window fields, lead time and SLA compliance cannot be audited.
+14. **Customer destination identity needs care.** Keep user ID, address ID, order-time address snapshot and route-stop ID distinct. A door/flat number is not a globally unique primary key; protect address/access details by role.
+15. **Delivery proof and notifications are not modelled.** Define delivered-to-person/safe-place rules, timestamp, actor, optional evidence, SMS/email trigger, failed notification handling and how a customer reports a mismatch.
+16. **Exception ownership is unclear.** For late driver, unready merchant, missing/damaged item, refusal, failed delivery and return, specify who can record/approve the event, required reason/evidence, customer communication and financial consequence.
+17. **Reviews need eligibility and target rules.** Define whether reviews apply to merchant, product and/or delivery experience; who may submit them, when, moderation/reporting rules and how fraudulent or duplicate reviews are prevented.
+18. **Permissions and auditability need test cases.** Operations staff, merchants, drivers, customers and finance/admin roles should only see or mutate authorised records. Assignment/status changes, refund approvals, payout actions and overrides need an audit trail and server-side authorisation.
+19. **The sample is not geographically representative.** Ten orders do not test overlapping town catchments, a remote boundary address, high-density stops, several merchants on one run, failed access, or capacity spikes. Add boundary and stress scenarios before operational promises.
+20. **Fees and booking types must be consistent across channels.** The same server-side policy must power UI quotes, checkout, order records, admin views, refunds and merchant statements. Client-submitted totals or fee amounts must never be authoritative.
+
+### Recommended next steps (in order)
+
+1. Approve a booking-policy table: lead time, standard window, priority window length/capacity, collection windows, slot hold/expiry and fee application.
+2. Add a mixed-merchant order, an unavailable line, one failed delivery and one item-level refund to the sample.
+3. Build a stop-by-stop route time budget and clarify the five-hour shift definition; validate with real routing data before claiming feasible times.
+4. Write separate state diagrams for order/payment, order line/merchant fulfilment, route/stop, and settlement/payout.
+5. Produce worked checkout and settlement examples in integer pence, including one mixed-merchant order and partial refund.
+6. Specify inventory reservation and variable-weight price adjustment rules.
+7. Audit existing migrations, RLS, RPCs, payment/webhook idempotency and driver identity read-only; map gaps before designing migrations.
+8. Only then turn agreed rules into schema/RPC/UI implementation tasks.
+
+**Guardrail:** This audit records risks and decisions to resolve. It does not establish that any listed feature exists in code, and it does not authorise schema changes or production data imports.
