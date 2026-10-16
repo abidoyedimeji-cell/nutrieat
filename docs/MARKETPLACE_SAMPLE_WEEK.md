@@ -47,14 +47,14 @@ The route times below are deliberately conservative planning estimates that incl
 |---|---|---|---|---|---|---:|
 | RTE-DAR-201 | Tue 20 Oct | DRV-01 | 08:30–13:00 (4h 30m) | ORD-DAR-001, ORD-DAR-002 | Pickup MRC-01 + MRC-02 → ADDR-101 → ADDR-102 (priority 10:00–12:00) | 4h 30m |
 | RTE-DAR-202 | Wed 21 Oct | DRV-02 | 08:30–12:30 (4h) | ORD-DAR-003 | Pickup MRC-01 → ADDR-103 | 4h |
-| RTE-DAR-203 | Thu 22 Oct | DRV-03 | 12:30–17:30 (5h) | ORD-DAR-005, ORD-DAR-006 | Pickup MRC-03 + MRC-02 → ADDR-106 → ADDR-105 (priority 17:00–19:00) | 5h planned; **priority-slot conflict to resolve** |
+| RTE-DAR-203 | Thu 22 Oct | DRV-02 | 11:00–15:00 (4h) | ORD-DAR-006 | Pickup MRC-02 → ADDR-106 within standard 12:00–16:00 window | 4h planned |\n| RTE-DAR-204 | Thu 22 Oct | DRV-03 | 14:00–19:00 (5h) | ORD-DAR-005 | Pickup MRC-03 → ADDR-105 within priority 17:00–19:00 window | 5h planned |
 | RTE-DAR-204 | Fri 23 Oct | DRV-04 | 08:30–13:00 (4h 30m) | ORD-DAR-008 | Pickup MRC-01 → ADDR-108 | 4h 30m |
 | RTE-DAR-205 | Sat 24 Oct | DRV-01 | 08:30–13:00 (4h 30m) | ORD-DAR-009, ORD-DAR-010 | Pickup MRC-03 + MRC-02 → ADDR-109 → ADDR-110 | 4h 30m |
 
 ### Route plan issues deliberately exposed
 
 - **Priority-slot conflict:** RTE-DAR-203 is not a valid final schedule as written: its 12:30–17:30 shift does not cover a 17:00–19:00 priority window. Move ORD-DAR-005 to a later shift/route or select an available earlier priority slot. Do not dispatch until resolved.
-- **Four drivers does not mean four routes only:** Driver DRV-01 is shown on Tuesday and Saturday, with separate shifts. The sample uses five route runs across the week; each individual shift remains at or under five hours.
+- **Four drivers does not mean four routes only:** Driver DRV-01 is shown on Tuesday and Saturday, with separate shifts. The sample uses six route runs across the week; each individual shift remains at or under five hours.
 - **Collection orders do not consume delivery-route capacity** in this example, but still require merchant handover records and collection-completion status.
 - **Merchant pickup timing matters:** A route that collects from two merchants needs both orders packed and ready. A late or missing merchant package may require a route re-plan or a line-level exception.
 - **No live routing calculation was performed.** The hours are illustrative; actual distance, travel time, town boundaries, road restrictions and priority feasibility require geocoded addresses and a routing source.
