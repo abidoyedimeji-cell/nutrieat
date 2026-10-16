@@ -852,3 +852,43 @@ The sample week is a useful scenario fixture, but it is not yet an executable di
 8. Only then turn agreed rules into schema/RPC/UI implementation tasks.
 
 **Guardrail:** This audit records risks and decisions to resolve. It does not establish that any listed feature exists in code, and it does not authorise schema changes or production data imports.
+
+
+---
+
+## 19. Marketplace UI wireframes, data wiring and engineering outline
+
+**New companion blueprint:** [MARKETPLACE-WIREFRAMES-AND-WIRING.md](./MARKETPLACE-WIREFRAMES-AND-WIRING.md). This is a planning outline only, not implemented UI or approved migrations.
+
+### Founder direction captured in this session
+
+- Marketplace browse is an open, shared catalogue of individual sellable listings from multiple merchants; customers can filter listings and browse a separate merchant store page.
+- Each listing needs a clear merchant/source, pack/unit, price, availability, image and structured metadata. A listing belongs to one merchant or to platform-owned stock; do not treat a whole merchant as one inventory item.
+- Each merchant manages its own unit-based stock. Once an order is validly purchased, stock must be deducted from the correct listing's available units. The technical race-condition solution remains to be chosen (see below).
+- Customers can maintain draft/saved baskets, move items between drafts, remove/edit items and reuse baskets later. A saved basket is not an order and does not promise future price or stock.
+- A basket should represent one destination and one booking configuration. Customer selects the delivery/collection date and standard/priority type as part of basket planning; incompatible booking choices should require changing the basket or using another draft.
+- Priority is intended to apply once to the combined customer delivery/order, not separately to each merchant. Multi-merchant priority booking must be feasible across all relevant merchant pickups and the destination window.
+- The planning direction discussed here is a booking date more than three days away and a 10-mile town-centre radius. These are proposed changes that must be reconciled with the canonical spec/decision register, which currently records a minimum two-day lead time and a 5-mile hub-based discovery rule. Discovery and delivery eligibility are distinct in the existing architecture.
+- UI scope should include customer home/browse/product detail/merchant store/basket/orders, merchant onboarding and portal, driver routes/stops, and admin/dispatch/finance pages. Initial wireframes can use sample/mock data.
+
+### Key engineering findings
+
+1. **Do not duplicate the canonical schema.** The technical master specification already defines table families and an RPC/server-action/webhook plan. The new blueprint maps UI actions to those proposed responsibilities and highlights where actual migrations/code must be audited first.
+2. **Merchant stock representation must be verified.** The canonical design explicitly proposes platform inventory and stock movements; confirm where merchant-owned unit quantity and reservations live before implementation. A product catalogue row alone is not automatically a safe inventory ledger.
+3. **“First to pay wins” has a payment race.** Two customers may both start payment against the last unit. A safer design is an atomic stock reservation/slot hold before payment, followed by payment confirmation and conversion to sold stock; failed/expired payments release the reservation. This makes the first valid reservation win. If strict payment-completion priority is required, design a suitable authorisation/capture flow instead. Do not just decrement stock in a later webhook without concurrency protection.
+4. **Three-day lead time does not itself reserve stock.** Define when reservation begins, its expiry, merchant readiness confirmation and release on payment failure.
+5. **Priority slot feasibility is an order-level constraint.** Price/availability must be calculated server-side once for the combined order. If any merchant cannot meet the window, the priority option must be unavailable or the customer must choose another booking before payment.
+6. **Route/driver/van remain separate entities.** The UI may record a vehicle assignment and manifest while full fleet administration remains external. Driver workflow should show only assigned tasks and minimum necessary customer details.
+7. **Merchant onboarding has independent gates:** business/operations approval, catalogue/stock readiness, staff membership and Stripe Connect capabilities. Submission of the form alone must not make a merchant live.
+
+### Questions to keep open
+
+- Does the proposed 10-mile radius change browse discovery, delivery eligibility, or both? The canonical design currently separates them.
+- Is stock reserved at checkout start or later, and for how long? How is a failed or abandoned payment released safely?
+- Does one basket strictly permit one address, booking date, fulfilment method and priority window? Recommended: yes.
+- What exact priority slot duration/capacity and fee policy applies to the entire order?
+- If one merchant in a mixed order is not ready, is the whole order rescheduled, or can partial fulfilment be allowed?
+- Where will merchant unit-stock quantity be stored after checking the actual migration columns: listing row or a dedicated merchant inventory table?
+- What minimum van assignment/load manifest must be recorded in the MVP if vehicle/fleet management is external?
+
+**Guardrail:** The companion blueprint is conceptual. No application code, database migrations, schema changes, RPCs or production data were changed in this planning update.
