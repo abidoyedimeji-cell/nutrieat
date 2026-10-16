@@ -488,3 +488,153 @@ For the next review, ask the engineer to provide:
 - A short end-to-end walkthrough of one collection order and one delivery order, including a mixed-supplier basket and a failed-payment case.
 
 **Gate:** Do not start a new migration or wire checkout UI until the high-impact business rules above are decided and the existing schema, RPCs, and deployment state have been verified.
+
+
+---
+
+## 15. Founder planning session — fulfilment, delivery, and customer routines
+
+**Session date:** 2026-10-16  
+**Status:** Decisions captured as the current direction; detailed rules remain open where noted.  
+**Purpose:** Record the founder's clarifications without treating unresolved operational details as final requirements.
+
+### 15.1 Delivery scheduling: standard versus priority
+
+**Current direction**
+- **Standard delivery:** customer selects a delivery date/window with a broader delivery period. The founder described this as roughly a three-day period / a flexible time within the available window; the existing `MARKETPLACE.md` says standard delivery is scheduled at least two days ahead. These descriptions are not yet precise enough to implement.
+- **Priority delivery:** customer pays the proposed additional £2.99 for a narrower, selectable time window on the chosen day (examples mentioned: 10 a.m. or 5 p.m.), subject to real route and driver capacity.
+- Priority should mean a clearer/more precise delivery window, not an unverified promise that an order will arrive sooner overall.
+- Do not assume any other paid-booking benefits until explicitly decided.
+
+**Open details to settle**
+1. Does “three-day period” mean a three-day lead time before delivery, a three-day delivery window, or a broad time window on the selected delivery day?
+2. What exactly is shown for standard delivery: a date, a day-part, a time range, or an estimated window?
+3. Are priority time slots fixed slot labels (for example, 10:00–12:00) or exact appointment times?
+4. What capacity limit, price, and fallback apply when a priority slot is unavailable or a route is delayed?
+5. Does the £2.99 priority fee apply per delivery address, per basket, or per merchant sub-order? A single delivery address may receive products from multiple merchants.
+6. Is collection scheduled separately, and does it use the same slot model?
+7. What notification and compensation/refund policy applies when the selected window is missed?
+
+### 15.2 Payment confirmation, delivery completion, and settlement
+
+**Founder direction**
+- A failed payment must not advance the order into the confirmed/fulfilment workflow.
+- A successful payment is the confirmation trigger for an order to proceed, subject to the server receiving authoritative payment-provider confirmation (not merely a browser success page).
+- Items must remain individually identifiable within the customer's order and by merchant. One delivery address can contain items from multiple merchants.
+- Drivers collect items and deliver to the destination. The delivery process records what was handed over, accepted, missing, refused, or returned.
+- Merchant notification should reflect the relevant order/items and the outcome of the delivery process.
+- The intended settlement approach is to reconcile at the end of the delivery run/day after delivery outcomes are known. The founder described a fully completed run with no returned items as the straightforward completion case.
+- Partial refunds or disputed items need item-level records and evidence so the unaffected lines can be distinguished from the disputed ones.
+
+**Important unresolved policy:** “settle at the end of the run/day” is a business direction, not yet a complete Stripe Connect payout design. Decide whether one failed/returned/disputed item delays the payout for the entire merchant order, only the affected line, or only a defined reserve/adjustment. Confirm how refunds, transfers, reversals, failed transfers, disputes and reconciliation will work before implementing payouts. Never infer delivery completion solely from the driver ending a route; each stop and its line-level outcomes must be recorded.
+
+### 15.3 Delivery location, stops, drivers, and routes
+
+- A **delivery stop** represents one unique destination/address for a delivery run. Multiple items and multiple merchant fulfilments may be consolidated into that stop.
+- Keep the customer destination separate from the merchant, merchant sub-order, delivery stop, route, and driver concepts. One customer order can involve multiple merchants; one route can involve multiple stops; a stop can carry goods from multiple merchants.
+- The founder wants drivers allocated to routes so operations can see which driver is assigned, which stops are on the route, route status, and estimated/actual distance.
+- A maps/routing service such as Google Maps may be considered, but the provider, cost, privacy implications, route optimization needs, and fallback have not been chosen.
+- Driver compensation is **outside the customer marketplace payment flow** and is paid separately. Do not model driver wages as merchant Connect payouts.
+- Driver onboarding may occur on or off the app, but the platform should retain the minimum operationally necessary onboarding/status information and protect it with appropriate access controls.
+
+**Schema/architecture implications to investigate before migrations**
+- Separate entities/relationships for delivery runs, routes, route stops, driver assignments, and merchant fulfilment/order lines, rather than treating one customer order as one route stop.
+- Define how a multi-merchant stop is packed, checked in/out, attributed to each merchant, and reconciled.
+- Record planned versus actual pickup/drop-off times, driver/route assignment history, delivery outcome, proof-of-handover where appropriate, and exception reason.
+- Avoid storing unnecessary sensitive driver onboarding information if it can remain with the onboarding provider; define access and retention rules.
+
+### 15.4 Communication channels
+
+- Customer-facing communication should be mediated by NutriEat rather than exposing personal driver/merchant contact details by default.
+- **Twilio SMS** is the current preferred candidate for time-sensitive mobile updates.
+- **Resend email** remains a proposed channel for email receipts and operational/customer notifications.
+- Drivers may receive platform-managed contact email accounts/login credentials, but this is a proposal to validate, not an established requirement. Never store plaintext passwords or share credentials in email; use the platform's authentication/invitation process.
+- “All messages through the app” needs a precise definition: it could mean all communication is initiated and logged by NutriEat, delivered by SMS/email, or actual in-app messaging. These are different features and should not be conflated.
+
+**Open communication rules**
+1. Which events trigger SMS versus email (payment confirmation, delivery-window reminder, driver en route, delivery complete, failed delivery, refund, merchant action)?
+2. What consent, opt-out, quiet-hour, retry, delivery-status and cost controls are required for SMS?
+3. Should driver/customer calls or messages be masked/proxied, and what should happen if SMS fails?
+4. What messages must be retained as an auditable order event?
+5. Are merchant notifications in-app, email, SMS, or a combination?
+
+### 15.5 Product-level disputes and variable-weight goods
+
+- Products and order lines need to be individually identifiable so a customer can report a missing, damaged, refused or disputed item without obscuring the rest of the basket.
+- Variable-weight meat means the final packed weight can differ from an estimate. The merchant is expected to weigh/pack the product; a product image may help evidence but is not, by itself, proof of actual weight or condition.
+- Before supporting variable-weight sales, decide whether the customer pays an estimated amount and receives a refund/adjustment, approves a final amount, or buys fixed-weight packs. Define permitted weight variance, unit pricing, scale/evidence requirements, and what happens if the customer disputes the weight.
+- Preserve the agreed product/price/unit/weight and relevant evidence for each order line. An image should be associated with a specific item and timestamp/context if it is used for dispute handling.
+
+### 15.6 Customer planning: saved items, saved baskets, and draft baskets
+
+**Current direction**
+- Support saving individual products and saving a whole basket.
+- Support multiple draft baskets. From an item menu (for example, a “more”/ellipsis menu), a customer can move an item into an existing draft basket or create a new one.
+- Customers can edit draft/saved baskets before placing an order. If a product is no longer wanted, they can remove it.
+- The founder wants a useful history of items that were previously in a saved basket, without making the active basket confusing. Removed items should be discoverable in a hidden/expandable “removed” or history area, rather than silently lost.
+- After a delivery, customers should be able to update their saved basket based on what they liked or no longer want (example: remove bananas). The saved basket is a reusable plan, not a claim that the same stock or price is guaranteed next time.
+- Do **not** build automatic recurring paid orders in the near-term release. Customers can save lists/baskets and manually choose a future delivery/collection date. Suggestions, favourites and “add to basket” are acceptable supporting features.
+
+**Open basket semantics**
+1. Is a “draft basket” a named reusable list, a checkout-in-progress, or should those be two distinct concepts?
+2. Can a customer have several active drafts and a separate current checkout basket?
+3. When an item is moved, is it removed from the source basket atomically, and what happens if the destination already contains that product?
+4. Is removed-item history tracked per basket with timestamp and reason, and can users restore an item?
+5. Should a completed order ever mutate the saved basket automatically, or should the user explicitly choose “update saved basket from this order”?
+6. What happens when a saved product becomes unavailable, changes price/pack size, or its merchant is no longer active?
+7. Does the £40 minimum apply only when placing an order, while under-minimum saved/draft baskets remain allowed? Current founder direction suggests yes: users can save a basket even if it does not meet the order minimum.
+8. How are products from multiple merchants and platform-owned inventory displayed in a draft basket, and how are delivery-only restrictions communicated before checkout?
+
+### 15.7 Local coverage rule
+
+**Current direction:** service areas are based on a **town centre**, with an approximately five-mile radius from the defined town-centre point—not five miles from each customer's home and not five miles from each merchant by default.
+
+**Still required**
+- Define a canonical centre coordinate for each launch town and who can edit it.
+- Decide whether the boundary is a straight-line radius or driving distance/route distance.
+- Define what happens where town coverage areas overlap, whether a customer can see merchants from more than one live town, and how the platform selects the applicable area.
+- Define how merchant-specific fulfilment, delivery capacity, and product restrictions combine with the town boundary.
+- Keep collection eligibility distinct from delivery eligibility.
+- Use the actual `merchants` model unless repository evidence establishes a separate `suppliers` entity. Treat “supplier” as a business term only if it is not a separate database entity; update `MARKETPLACE.md`'s sample query to match the canonical schema after confirming the model.
+
+### 15.8 Initial customer proposition and product scope
+
+- The initial customer promise is local food discovery, easier planning, and delivery or collection where available.
+- Do not promise certified organic products, verified provenance, universal farm-direct sourcing, or detailed quality comparisons in the near-term pitch until supply and evidence requirements are in place.
+- The current plan's first assortment (butchers/meat, eggs and mineral water) is narrower than a broad marketplace of all local farmers, grocers and organic suppliers. The launch plan and marketing must agree on what is actually onboarded.
+
+### 15.9 Current decisions and open items after this session
+
+| Topic | Current direction | Status |
+|---|---|---|
+| Standard delivery | Flexible/broader window; current architecture plan says scheduled at least two days ahead | Clarify exact meaning and customer promise |
+| Priority delivery | Paid narrower time slot, subject to capacity; £2.99 is proposed in MARKETPLACE.md | Proposed; confirm slot model and fee application |
+| Payment failure | Failed payment must not confirm/advance the order | Agreed direction; verify webhook/server implementation |
+| Order line granularity | Individually track products and merchant lines | Required direction; verify schema and lifecycle |
+| Delivery completion | Record item-level outcomes; reconcile run/day after delivery outcomes | Proposed; settlement and partial-failure rules open |
+| Multi-merchant delivery stop | One destination may receive goods from several merchants | Required concept; data relationships to verify |
+| Driver assignment | Allocate drivers to routes and track route/stop status and distance | Proposed; operational model and maps provider open |
+| Driver compensation | Paid separately, outside marketplace customer payment flow | Direction established; driver payroll is out of scope for Connect merchant payouts |
+| Messaging | Twilio SMS preferred for time-sensitive updates; Resend email also planned | Providers/protocols and consent rules to verify |
+| Saved products | Save individual items | Product requirement |
+| Saved/draft baskets | Multiple editable named baskets; move items between baskets; keep removed-item history | Product requirement; semantics and schema design open |
+| Recurring paid orders | Not in near-term launch | Explicitly deferred |
+| Town service area | Approx. five miles from a defined town-centre point | Direction established; coordinates and distance method open |
+| Organic/provenance claims | Not promised in the near term | Explicitly deferred until verifiable data exists |
+
+### 15.10 Recommended next work session
+
+Prioritise the **order and delivery lifecycle** as a state diagram before changing schema or RPCs. The lifecycle should cover:
+
+1. Draft basket → checkout attempt.
+2. Payment pending → payment confirmed or failed.
+3. Confirmed order → supplier preparation and driver/route planning.
+4. Merchant pickup/packing → delivery stop.
+5. Per-line outcomes: delivered/accepted, missing, damaged, refused/returned, or disputed.
+6. Stop completion and route/run completion.
+7. Refund/adjustment decisions and merchant settlement eligibility.
+8. Customer and merchant notifications, audit history, and reconciliation.
+
+Keep **order status**, **line/item outcome**, **delivery stop status**, **route/run status**, and **payment/payout status** separate. They are related but are not the same state machine. This separation is essential for mixed-merchant baskets, partial refunds and a route with multiple destinations.
+
+Update the schema/RPC implementation plan only after this lifecycle and its edge cases are agreed. The repository audit can continue read-only in parallel; do not apply or modify migrations as part of this planning note.
