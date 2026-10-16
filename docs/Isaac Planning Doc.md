@@ -784,3 +784,21 @@ Permissions should be role-scoped: an operations worker may dispatch routes with
 Before schema changes, produce a domain relationship diagram and a separate state/lifecycle diagram. The relationship diagram should show Customer, Address, Order, Order Line, Merchant, Product/Stock, Merchant Fulfilment, Delivery Stop, Route/Run, Driver Assignment, optional Vehicle Reference, Payment, Refund, Merchant Settlement/Payout, Dispute and Review. The lifecycle diagram should show order/payment, item fulfilment, route/stop, and financial settlement as separate but linked state machines.
 
 **Implementation guardrail:** This is planning documentation only. Continue repository/schema/RPC review read-only. Do not apply migrations, alter existing schema, or wire new screens until the entity boundaries, key relationships, lifecycle states and open business rules have been reviewed and agreed.
+
+
+---
+
+## 17. Sample operating week — one town, ten orders, four drivers
+
+A separate illustrative planning fixture has been created at [`docs/MARKETPLACE_SAMPLE_WEEK.md`](MARKETPLACE_SAMPLE_WEEK.md). It contains ten fictional orders for one sample town/week, four driver IDs, standard/priority/collection booking types, manually repeated saved-basket orders (not automatic recurring charges), route/run assignments, merchant pickup and customer delivery stops, sample IDs across sectors, and operational exception cases.
+
+Key constraints represented:
+- Approximate ten-mile radius from a defined town-centre point, pending boundary validation.
+- No driver shift exceeds five hours in the sample; route times are estimates, not live navigation results.
+- Collection orders are not put on delivery routes.
+- Priority is a narrower time window; the example's evening priority order has a separate shift so its selected window is not knowingly contradicted by the schedule.
+- Saved-basket repeats require the customer to review stock/price, edit if needed, select a booking type, and manually place/pay for a new order.
+- Driver/van, route, stop, order, order line, merchant fulfilment, payment, refund, settlement/payout and review are separate concepts linked by IDs.
+- The sample is a test fixture only, not production data and not evidence that actual locations/routes are serviceable.
+
+Use this sample to challenge the proposed lifecycle and operations UI before migrations or RPC changes. Real dispatch feasibility requires real geocoded addresses, merchant readiness times, route calculations, driver breaks/return-to-base policy, and confirmed priority-slot rules.
