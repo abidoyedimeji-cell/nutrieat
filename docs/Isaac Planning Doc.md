@@ -310,3 +310,181 @@ Start with this question:
 **What exactly are we promising the first customer from the moment they open NutriEat to the moment their order is handed over?**
 
 Walk through one realistic first order from a customer in the initial launch area. Decide what they can buy, how availability is confirmed, what they pay, when the order becomes binding, how it is delivered or collected, and what happens if anything goes wrong. This single journey will expose many of the most important decisions before development begins.
+
+
+---
+
+## 12. Customer proposition audit — founder's explanation
+
+**Source reviewed:** Founder discussion in the planning conversation, compared with `docs/MARKETPLACE.md` §§1–3, 8–9.
+
+### 12.1 What the founder is trying to communicate
+
+The proposed customer insight is not merely “buy groceries online.” It is:
+
+- **Plan instead of panic-buy:** help people think ahead about meals and shopping instead of deciding everything at the last minute.
+- **Discover local sources:** make it easier to see food available from nearby farmers, grocers, butchers and other suitable independent suppliers, with understandable information about origin, price and quality.
+- **Build a repeatable routine:** let people plan regular weekly or twice-weekly purchases, subject to actual supplier availability and fulfilment capacity.
+- **Choose how to receive it:** offer delivery or collection where the product and operating model allow it.
+
+The memorable shorthand is **“your local food market, brought closer to home.”** “Bringing the farmer to your doorstep” is vivid, but it should be supporting language rather than the whole definition: the planned initial assortment includes butchers and platform-owned eggs/water, and not every product necessarily comes from a farmer or directly from its producer.
+
+### 12.2 Recommended message hierarchy
+
+**One-line pitch**
+
+> Your local food market, brought closer to home. Discover food from nearby farmers, grocers, butchers and independent suppliers, plan what you need, and arrange delivery or collection where available.
+
+**Short high-street explanation**
+
+> Imagine having your local food market on your phone. You can discover what's available nearby, plan what you need, and arrange for it to be delivered or collected. That's the idea behind NutriEat Farmers Market.
+
+**Longer explanation, only if the person is interested**
+
+> NutriEat Farmers Market is designed to help you discover food from local suppliers, make more deliberate shopping choices, and build a routine around the things you buy regularly. You can explore what's available, compare product details and prices where the information is provided, and arrange delivery or collection where supported.
+
+### 12.3 Audit: strengths, risks, and evidence gaps
+
+**Strengths**
+- Opens with a relatable problem: the mental load of deciding what to eat and remembering what to buy.
+- Makes local discovery feel concrete and human rather than technical.
+- Consistency and repeat purchasing could become a meaningful differentiator if recurring orders/reminders are actually built.
+- Delivery and collection give customers flexibility.
+
+**Risks / claims to validate**
+- **“Organic”** must only be used for products that meet the relevant standard and are accurately represented. The current initial assortment does not prove that every product is organic.
+- **“Direct from source” / “farmer to doorstep”** must not imply direct farm provenance for butcher, reseller or platform-owned products where that is not true. Show supplier and origin details only when verified.
+- **“Know the price difference and quality”** requires comparable, accurate unit pricing, pack sizes, origin/provenance information and clear product details. The current schema has a price, unit label and category, but no explicit provenance/certification fields or structured quality evidence.
+- **“Schedule twice a week or every week”** is a customer promise that is not yet represented by the current marketplace schema. The current plan includes a scheduled order date/window, but no recurring-order/subscription model, recurrence rules, pause/skip, payment mandate, or stock-substitution policy.
+- **“Add some other stuff”** raises basket rules: can a customer combine merchant products and platform-owned products; can they mix collection and delivery-only products; how are separate supplier fulfilments and fees shown?
+- **Convenience** must be backed by real supplier stock, driver capacity, service areas and reliable delivery windows. The architecture plan itself names supply, payouts and logistics as the hardest part.
+
+**Conclusion:** The high-street pitch is a good positioning hypothesis. It is not yet a complete feature specification. Test whether customers understand it and what they expect it to mean before turning every phrase into a product commitment.
+
+### 12.4 What the current marketplace plan supports
+
+| Founder proposition | Evidence in MARKETPLACE.md | Current support / gap |
+|---|---|---|
+| Nearby local food | §1 describes a local agri-food marketplace; §3 names Dartford, Erith and Eltham and a 5-mile matching concept | Proposed discovery foundation; actual customer-facing discovery route still needs verification |
+| Several local suppliers | §3 proposes three butchers/meat suppliers plus eggs and water; §6 models merchants and products | Schema supports multiple merchants in concept; first assortment is narrower than “any local organic food” |
+| Plan ahead | §3 and §8 propose scheduled delivery at least two days ahead and delivery windows | A single scheduled order is proposed; recurring weekly/twice-weekly ordering is not specified |
+| Delivery or collection | §3 defines collection and standard/priority delivery | Collection applies to eligible products; eggs/water are explicitly delivery-only |
+| Understand prices | §4 defines GBP integer-pence prices and fee/commission rules | Price display is supported conceptually; unit-price comparison, provenance and quality fields need definition |
+| Convenience / reliability | §8 phases discovery before ordering/payouts; §9 lists supplier, logistics and legal blockers | Promise must wait for real stock, driver operations, support and failure policies |
+| “From the source” | §3 identifies merchant-consigned meat and platform-owned eggs/water | Product ownership and source differ by line; provenance cannot be assumed |
+| Consistency / recurring purchases | Not specified as a recurring-order feature in §§3–8 | Open product requirement; needs business and technical decisions |
+
+---
+
+## 13. Repository audit — current implementation versus the plan
+
+**Audit scope:** Reviewed `docs/MARKETPLACE.md`, `supabase/migrations/0010_marketplace_foundation.sql`, migrations `0011_identity_organisations.sql` and `0013_identity_operations.sql`, the migrations directory through `0028`, and the top-level `app/` route listing on branch `claude/cookbook-mvp-architecture-8oma2q`. This is a source review, not a live database inspection or deployed end-to-end test.
+
+### 13.1 Key finding: the documentation status is stale or too broad
+
+`MARKETPLACE.md` says “Nothing here is built yet” and describes migration `0010` as future work. On the reviewed branch, `0010_marketplace_foundation.sql` **already exists** and creates marketplace enums, launch areas, merchants, stock imports, products, platform inventory, addresses, orders, order items, payouts, referrals, rewards, and RLS policies. Later migrations `0011`–`0013` add organisation/staff/driver identity structures and privileged identity-operation RPCs; subsequent migrations through `0028` add other platform infrastructure.
+
+Therefore, the accurate status is: **marketplace foundation schema exists in the repository; full marketplace product behaviour and launch readiness are not established by the documents reviewed.** A migration file in Git does not prove it has been applied to the target Supabase project, and tables/RPCs do not prove the end-to-end product is wired or tested.
+
+The top-level `app/` listing on this branch does not contain an `app/market` route. The reviewed `0013` RPCs are for platform/merchant staff and drivers, not customer marketplace ordering. Treat customer discovery, basket, checkout, order management and marketplace payouts as unverified/not yet demonstrated, rather than claiming they work.
+
+### 13.2 High-priority schema and logic findings
+
+1. **Radius-query example references the wrong table.** `MARKETPLACE.md` §6 queries `suppliers s`, but the schema created by migration `0010` uses `merchants`. The example is not directly executable as written. It also checks distance from the user's default address but does not visibly enforce the `launch_areas.is_live` gate or merchant launch-area relationship in that query.
+2. **Commission defaults can be wrong for collection.** Migration `0010` gives `merchants.commission_default` a 12% default, while the commercial plan specifies 8% for collection and 12% for standard/priority delivery. The order creation logic must choose the correct rate per fulfilment method and snapshot the agreed rate at order time; a merchant default alone is insufficient.
+3. **Commercial rules are not fully enforced by the schema.** The migration creates the order and fee columns but does not, in the reviewed file, provide a marketplace order-creation RPC that atomically validates basket totals, minimum spend, stock, eligibility, fulfilment, fees, commission and payout breakdown. These calculations must not be trusted to browser/UI values.
+4. **Recurring ordering is absent from the current model.** `scheduled_for` and `delivery_window` describe a scheduled order, not a recurrence plan. Weekly/twice-weekly orders need an explicit decision and likely recurrence/subscription data plus skip, pause, stock-change, cancellation and payment rules.
+5. **Stock race conditions need a design.** Platform inventory has a count, but the reviewed foundation does not show an atomic stock reservation/decrement workflow for concurrent checkouts, reservations expiring after failed payment, or a policy for merchant stock that can change outside NutriEat.
+6. **Mixed baskets and multi-store fees are ambiguous.** Platform-owned items use a null `merchant_id`; the plan says mixed merchant + eggs/water orders have no mixed-order fee, while multi-store orders incur £2.99. Define whether the fee counts distinct merchant IDs only, how platform-owned lines are treated, and whether a delivery-only line forces the whole basket to delivery.
+7. **Order and payout lifecycle needs more detail.** Current order statuses include draft, pending_payment, paid, preparing, out_for_delivery, fulfilled, cancelled and refunded. They do not clearly distinguish collection-ready/collected, partial fulfilment, partial refund, failed delivery, awaiting supplier confirmation, or disputed orders. `market_payouts.status` is free text, and the reviewed foundation does not show a unique idempotency constraint tying a payout/transfer to a merchant-order settlement.
+8. **Order snapshots and deletion behaviour need review.** Order items preserve `name_snapshot`, price and totals, which is useful; however, merchant/product references can become null on deletion and the order references cascade on user deletion. Paid/financially relevant orders should have an intentional retention and archival strategy rather than accidental loss or ambiguous ownership.
+9. **Product model is too thin for the promised discovery experience.** The proposed pitch mentions local, potentially organic products, origin, quality, and price comparison. The foundation has basic name, unit, price, category, image, availability and supply type, but no explicit provenance, organic certification evidence, allergen/dietary metadata, variable-weight pricing, pack-size normalization or verified supplier/source claims.
+10. **RLS and launch-area gating need a focused review.** The foundation enables RLS and makes writes to key tables service/admin-only, which is a useful security baseline. However, public read policies for active merchants and available products do not themselves visibly require the merchant's launch area to be live or ensure the user is within the allowed service radius. Discovery queries and policies must agree; never rely on the UI alone for access/eligibility enforcement.
+11. **Address defaults and geocoding need constraints and failure handling.** `user_addresses` has `is_default` but the reviewed migration does not enforce at most one default address per user. Decide how a missing/failed geocode, changed postcode, or boundary case is handled and whether address edits can affect an existing order (normally order delivery details should be snapshotted).
+12. **Product ownership needs database-level consistency.** The product table allows `merchant_id` to be null and separately has `supply_type`; constraints should prevent contradictory states (for example, merchant supply with no merchant, or platform supply linked to a merchant). The unique `(merchant_id, slug)` constraint also does not by itself prevent duplicate platform-owned slugs because SQL treats nulls as distinct in ordinary unique constraints.
+13. **Quantity semantics are limited.** `qty` is an integer. If meat is priced by variable weight or customers order fractional quantities, the data model and checkout math need a defined unit/precision and final-price adjustment policy.
+14. **Payment integration remains a blocker until verified.** The plan proposes Stripe Connect and separate transfers per merchant, but the reviewed foundation's `market_orders` and `market_payouts` fields alone do not establish the complete payment flow. Confirm Connect is enabled, onboarding requirements are known, webhook events are signature-verified/idempotent, transfers cannot be duplicated, refunds/chargebacks reverse the right amounts, and reconciliation can explain every penny.
+
+### 13.3 RPC, server-action and wiring gaps to verify
+
+Before implementing or approving UI wiring, inspect the full code paths and tests for the following. This audit did not establish these as complete:
+
+- A server-side merchant/product discovery query that combines active merchant, live launch area, geocoded serviceability and the chosen radius rule.
+- A privileged admin RPC/action for merchant creation, approval, product import validation, stock updates and Stripe Connect onboarding-link generation, with role checks and audit events.
+- A customer address create/update/geocode flow, including one-default-address enforcement.
+- A single authoritative price/eligibility calculation used by both checkout and order creation.
+- An atomic order-creation RPC or equivalent server transaction that validates prices/availability and writes order + line snapshots + fee/commission breakdown.
+- Payment-intent creation and a webhook-driven transition to paid; browser return URLs must not be treated as proof of payment.
+- Idempotent per-merchant transfer creation, Connect status gating, transfer/payout webhook reconciliation and refund/chargeback handling.
+- Platform inventory reservation/decrement with concurrency control and compensation on failed payment/cancellation.
+- Customer order history/status, collection-ready/collected state, driver assignment and delivery exception workflow.
+- Admin/operations views for failed orders, supplier shortfalls, refunds, payouts and audit trail.
+- Tests for RLS (anon, ordinary authenticated user, other user, platform roles, merchant staff for another merchant), RPC authorization, duplicate webhooks, concurrent checkout, fee boundaries (£39.99/£40/£59.99/£60), mixed baskets, and partial failure.
+- TypeScript database types generated/updated after schema changes, environment-variable validation, error/empty/loading states, and responsive/accessibility behaviour in the UI.
+
+The repository has later identity/operations infrastructure, including staff and driver tables and RPCs. Reuse that carefully; do not create a parallel role system or assume those identity RPCs already implement marketplace order operations.
+
+### 13.4 Migration and architecture blockers before new work
+
+- **Migration numbering/status:** `0010` already exists and migrations continue through `0028` on the reviewed branch. Do not reuse `0010` or blindly follow the old “create migration 0010” instruction. Check migration history on the target database and create the next additive migration using the project's actual migration convention.
+- **Target environment:** Confirm which branch is the integration/production source and whether migrations `0010`–`0028` have actually been applied to the intended Supabase project. Git presence is not database deployment evidence.
+- **Business decisions first:** Resolve legal seller/merchant-of-record, product ownership, radius semantics, service area, recurring-order scope, delivery/collection eligibility, variable-weight meat, cancellation/refund policy, failed delivery/spoilage liability, and launch pricing.
+- **Data integrity:** Define status transitions, immutable order/product/price/commission snapshots, payment and transfer idempotency keys, inventory reservation, and financial retention before writing checkout RPCs.
+- **Security model:** Define which operations are callable by anonymous users, customers, platform staff, merchant staff, and drivers. Keep privileged service-role work server-side; add explicit RPC grants and tests.
+- **Payments and compliance:** Verify Stripe Connect platform enablement, merchant onboarding/KYC, charge/transfer approach, refunds and disputes, and the legal responsibilities before accepting live orders.
+- **Operations are architecture:** Confirm actual supplier stock feeds, pickup windows, driver capacity, cold-chain handling, delivery-slot capacity, customer support and escalation processes. These constraints determine schema and UI.
+- **Customer promise versus MVP:** Decide whether launch is a small curated marketplace (butchers + eggs/water) or a broad discovery promise for local farmers, grocers and organic suppliers. Do not market unsupported inventory or recurring deliveries.
+
+---
+
+## 14. Questions for the engineer — resolve before migrations or order logic
+
+Please answer these with evidence from the code/migrations or mark them “not implemented / unknown.” The answers should be recorded before designing the next schema/RPC/UI changes.
+
+### Product and commercial rules
+1. Is the first release intentionally limited to three butchers plus eggs/water, or should it support a broad range of farmers, grocers and organic suppliers from day one?
+2. Is “weekly/twice-weekly ordering” a required feature for launch, a reminder/list feature, or a future recurring order/subscription feature?
+3. Who is the legal seller for each product type, and who is responsible for pricing, product claims, refunds and food safety?
+4. Does the £40 minimum apply to the entire basket or per merchant? Is it calculated before or after discounts and excluding fees?
+5. Does a basket with two merchant suppliers incur the £2.99 multi-store fee? Does a merchant + platform-owned basket incur it? What if the basket contains only platform-owned products?
+6. Are eggs/water delivery-only even when the customer selects collection for other products? Must checkout block the combination or convert the entire basket to delivery?
+7. Can meat be variable weight? How should estimated price, final weight, customer approval, payment adjustment and refunds work?
+8. What is the exact serviceability rule: within five miles of the customer, merchant, or delivery hub; constrained by launch town and each merchant's own service area; and can collection bypass delivery coverage?
+9. What are the exact cancellation cutoff, failed-delivery, substitution, partial-refund, spoilage and chargeback policies?
+10. What does “consistent” mean in the first release: favourites/reorder, shopping-list reminders, scheduled one-off orders, or automatically recurring paid orders?
+
+### Schema and migrations
+11. Which migrations have been applied to the target Supabase project? Can the engineer provide migration status and schema diff rather than infer from Git?
+12. Why does the radius SQL in `MARKETPLACE.md` query `suppliers` instead of `merchants`, and what is the canonical serviceability query?
+13. Should merchant commission be stored as a configurable rate per fulfilment method, and how is the agreed rate snapshotted on each order?
+14. What constraints ensure `supply_type`, nullable `merchant_id`, and platform inventory agree?
+15. How are unique product slugs enforced for platform-owned items? How is exactly one default address enforced per user?
+16. Which fields snapshot delivery address, product identity, supplier legal entity, unit/weight, fee rules, commission rate, tax treatment if applicable, and terms version at checkout?
+17. What retention/deletion policy protects paid order and financial records if a user, merchant or product is deleted or deactivated?
+18. How will stock be reserved atomically, and what releases the reservation after payment failure or timeout?
+
+### RPCs, payment and security
+19. Which marketplace-specific RPCs/server actions exist today for product import, merchant approval, discovery, order creation, payment, cancellation, refund, stock updates and payouts? Please link each implementation and its tests.
+20. Is all pricing recalculated server-side from trusted database values, or can the client submit totals/fees/commission? The latter must not be trusted.
+21. Does the payment webhook create/transition orders idempotently, and what unique key prevents duplicate order/payment processing?
+22. What is the exact Stripe Connect charge/transfer model for one supplier versus multiple suppliers? How are refunds, disputes and failed transfers reconciled?
+23. Are Connect accounts restricted from accepting orders until the required onboarding/capability state is confirmed?
+24. Which RLS policies expose merchants/products outside live launch areas? Are RLS and RPC tests written for cross-user and cross-merchant isolation?
+25. Are public referral/waitlist inserts rate-limited, validated and protected against spam/duplicate voting?
+
+### UI, navigation and operations
+26. Is there currently a customer-facing `/market` route? If not, what is the agreed navigation and authentication behaviour?
+27. Which screens are planned for postcode/address capture, nearby merchants, product detail, stock/availability, basket, fee breakdown, delivery/collection selection, confirmation, order history and order status?
+28. Which admin screens exist for merchant onboarding, stock import review, Connect status, refunds and reconciliation, and which are still planned?
+29. How does the driver workflow assign orders, record collection/handover, handle cold-chain exceptions and report failed deliveries?
+30. What notifications are sent at each order-state transition, and are they driven from reliable server-side events/outbox records?
+31. What telemetry and operational dashboard will show stock failures, late orders, refunds, payment mismatches and payout discrepancies?
+
+### Evidence requested
+For the next review, ask the engineer to provide:
+- Migration status/schema diff for the intended Supabase environment.
+- Links to current marketplace-related route files, server actions, RPCs and payment webhook handlers.
+- RLS/RPC/payment test coverage and any known failing tests.
+- A short end-to-end walkthrough of one collection order and one delivery order, including a mixed-supplier basket and a failed-payment case.
+
+**Gate:** Do not start a new migration or wire checkout UI until the high-impact business rules above are decided and the existing schema, RPCs, and deployment state have been verified.
