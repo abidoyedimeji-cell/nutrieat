@@ -638,3 +638,149 @@ Prioritise the **order and delivery lifecycle** as a state diagram before changi
 Keep **order status**, **line/item outcome**, **delivery stop status**, **route/run status**, and **payment/payout status** separate. They are related but are not the same state machine. This separation is essential for mixed-merchant baskets, partial refunds and a route with multiple destinations.
 
 Update the schema/RPC implementation plan only after this lifecycle and its edge cases are agreed. The repository audit can continue read-only in parallel; do not apply or modify migrations as part of this planning note.
+
+
+---
+
+## 16. Architecture planning session — marketplace sectors and delivery operations
+
+**Session date:** 2026-10-16  
+**Status:** Founder direction captured; data ownership and lifecycle details remain to be validated.  
+**Scope:** Conceptual architecture only. This session did not change migrations, RPCs, application code, or deployment configuration.
+
+### 16.1 Architectural principle: distinct sectors, connected by stable IDs
+
+The marketplace should be designed as clear operational sectors that can be managed independently but connected through stable, unique identifiers and explicit relationships. Avoid one oversized “marketplace” record that tries to represent customers, houses, orders, merchants, routes, vehicles, stock, settlements and reviews at once.
+
+Proposed sectors:
+1. **Customer and delivery destination** — customer identity, saved addresses, destination/access instructions.
+2. **Merchant and catalogue** — merchant identity, products, supply source and merchant-specific availability.
+3. **Inventory and order lines** — stock/availability and individually traceable products within each order.
+4. **Orders and payment** — customer basket, order, payment attempt and payment-confirmation lifecycle.
+5. **Fulfilment and delivery** — merchant fulfilment groups, route, route stops, driver assignment and delivery outcomes.
+6. **Vehicle/van operations** — recognised as a separate real-world logistics responsibility, but not automatically a first-class marketplace product/app entity at this stage.
+7. **Settlement and payouts** — merchant-level financial reconciliation based on order/line outcomes, separate from driver compensation.
+8. **Reviews and disputes** — customer feedback and item/order issue records tied to verified purchases and outcomes.
+9. **Admin/operations** — a deliberately simple interface for staff to assign orders to routes, assign drivers, see destination stops and monitor exceptions without needing to understand the whole codebase.
+
+### 16.2 Core entity relationship sketch
+
+This is a conceptual starting point, not a final schema:
+
+- **Customer** has a stable customer/user ID.
+- **Delivery destination/address** has its own stable address ID and belongs to a customer. The address record must not be identified only by a door number.
+- **Order** has an order ID and belongs to a customer. It references a selected delivery-address snapshot so later address edits do not rewrite the destination of an existing order.
+- **Order item/line** has its own ID and references the order, product and merchant where applicable. This enables line-level packing, shortage, refusal, refund and dispute handling.
+- **Merchant** has a merchant ID. A merchant can supply many products and fulfil many order lines.
+- **Product** has a product ID. A product can have stock/availability records; stock must be associated with the correct merchant or platform-owned supply.
+- **Merchant fulfilment / merchant sub-order** groups the lines that one merchant must prepare for a customer order.
+- **Delivery stop** represents one destination on a route. A stop can contain fulfilment from more than one merchant and may include multiple order lines/orders if the business later allows consolidation; this must be an explicit policy.
+- **Route/run** has a route ID and groups ordered delivery stops for an operational run.
+- **Driver assignment** links a driver ID to a route/run for a defined period. The existing identity/driver model should be inspected and reused rather than creating a duplicate driver identity.
+- **Vehicle** is conceptually separate from inventory. A route may be assigned a vehicle outside the customer marketplace app or through a future logistics/operations system. The marketplace should not silently assume a vehicle record is required for the MVP.
+- **Payment / refund / merchant settlement / payout** each needs its own financial record or provider reference and status. Do not use “order complete” as a substitute for all financial states.
+- **Review** should reference a verified completed order and, where useful, the reviewed merchant or product. Decide whether customers can review individual products, merchants, or both.
+
+### 16.3 “Home” identity: address, entrance, customer, and delivery stop are different concepts
+
+The founder suggested using the door/house as the unique delivery destination. This is a useful operational idea, but a door number alone is not globally unique and should not be the database primary key.
+
+Recommended distinction:
+- **Address ID:** stable internal ID for a normalized address/location record.
+- **Customer/user ID:** identity of the person placing the order.
+- **Delivery instructions/access point:** door, flat, entrance, buzzer or other access details, stored with suitable privacy controls.
+- **Order delivery snapshot:** the destination details and instructions as they stood when the order was placed.
+- **Delivery stop ID:** one operational stop on a particular route/run, even when multiple customers/orders or merchant fulfilments are associated with the destination under an explicitly defined consolidation policy.
+
+Two different customers may share a building/address; one customer may have several delivery addresses; and a single address can be used by many orders over time. Therefore, do not make “door number” or “house” equal to a user ID or order ID. Avoid exposing address IDs or door/access details to unrelated users or merchants.
+
+### 16.4 Route, van, and driver ownership
+
+**Founder direction**
+- The marketplace operation is expected to provide the vans and drivers, rather than relying on drivers to bring their own vehicles in an Uber-style model.
+- The founder is also considering a future separate logistics company. This creates a deliberate architecture boundary: the marketplace needs to coordinate fulfilment, but should not become tightly coupled to a future vehicle-fleet management product.
+- Operationally, the route is the main dispatch unit: a route/run has a driver assignment, a planned sequence of destination stops, and a set of orders/merchant fulfilments to deliver.
+- Staff should be able to assign a driver to a route and see the stops, relevant orders, merchant items and delivery outcomes through a simple admin/operations workflow.
+- The founder does not currently want vehicle management to become a complex marketplace-app feature.
+
+**Recommendation**
+- Model **route/run**, **route stops**, **driver assignment**, and **delivery outcomes** as explicit concepts because they are needed to operate deliveries.
+- Keep **vehicle/fleet management** as a separate concern. For an early manual operation, staff can track the van assignment using an operational process or lightweight external fleet record, provided it is auditable and the route's assigned vehicle can be identified when needed.
+- Do not put vans into product inventory or merchant stock.
+- If a future logistics company or fleet system becomes real, connect it through stable IDs and a defined integration boundary rather than embedding fleet-specific fields across orders and merchant tables.
+- Even if staff manually decide which orders go in which van, the system should still be able to record which route/run and stop handled an order, who was assigned, and the delivery result. Manual planning is not a reason to lose traceability.
+
+### 16.5 Inventory is not the same as van load
+
+Keep these concepts distinct:
+- **Product inventory/stock:** how many units a merchant or platform-owned supply can offer for sale.
+- **Packed/allocated order lines:** the specific items reserved or picked for a particular paid order.
+- **Van load manifest:** the order lines or sealed packages physically loaded for a route/run.
+- **Delivered/returned/missing items:** the recorded result at a particular stop.
+
+The van manifest may eventually be generated from paid orders and packing checks, but it should not be treated as stock inventory. The system needs to reconcile what was expected, packed, loaded, delivered, refused, returned, or missing.
+
+### 16.6 Ten-mile town-centre coverage
+
+**Updated founder direction:** replace the previous approximate five-mile coverage idea with an approximately **ten-mile radius from a defined town-centre point**.
+
+This is a proposed service-area rule, not a promise that every address inside the circle can receive every product. The implementation must also account for:
+- live/approved launch towns;
+- merchant/product availability;
+- delivery versus collection eligibility;
+- actual driver and route capacity;
+- overlapping town catchments;
+- address geocoding and boundary cases.
+
+Still decide whether the radius is straight-line distance (simpler and consistent for geographic coverage) or road travel distance (more operationally realistic but depends on routing data). Define and store one canonical centre coordinate per town/launch area. Do not revert to a customer-home-centred radius unless the business decision changes.
+
+### 16.7 Settlements, merchant payouts, and driver compensation
+
+- Merchant settlement/payout is a marketplace financial workflow tied to the merchant's order lines and delivery/return/refund outcomes.
+- Driver pay is a separate operational/payroll relationship and must not be mixed with Stripe Connect merchant payouts.
+- “Settle at end of delivery run/day” remains the intended operating direction, but the policy needs to distinguish completed lines from disputed/returned lines and determine whether unaffected lines can settle.
+- Keep payment capture, customer refund, merchant commission, merchant payable balance, transfer/payout, and reconciliation status separate. Each needs an auditable amount, currency, source event/provider reference, idempotency protection and timestamps.
+- A route/run ending does not itself prove every order was delivered or every merchant payout is ready.
+
+### 16.8 Reviews and disputes
+
+- Reviews should only be enabled against a legitimate purchase and after the relevant order/line reaches a defined completion state.
+- Decide whether review targets are the merchant, individual product, delivery experience, or a combination.
+- A review is not a substitute for a refund/dispute case. Item problems require structured issue categories, evidence, resolution state and refund/adjustment links.
+- Avoid allowing a single disputed item to erase or incorrectly mark unrelated items in a multi-merchant order.
+
+### 16.9 Simple operations UI for non-technical staff
+
+The operational interface should use task-oriented language, not require staff to understand the database. A basic workflow should let authorised staff:
+1. View paid orders that are eligible for fulfilment.
+2. Group/order eligible deliveries into a route/run.
+3. Assign a driver and, if tracked, a vehicle/van reference.
+4. Review each route's stops and expected merchant packages/order lines.
+5. Record pickup/packing and load checks.
+6. Mark stop and per-item outcomes, including exception reasons.
+7. View unresolved missing/returned/disputed lines.
+8. See which merchant settlements are eligible, held, refunded or reconciled.
+9. Review an audit history of who made assignments and status changes.
+
+Permissions should be role-scoped: an operations worker may dispatch routes without having authority to change product prices, alter payment amounts, approve refunds above a threshold, or trigger payouts. Driver views should expose only assigned routes/stops and the minimum necessary destination information.
+
+### 16.10 Remaining architecture questions
+
+1. Does one route/run always use exactly one driver and one van, or can drivers/vehicles change mid-run with an assignment history?
+2. Can a route contain orders from multiple towns within the ten-mile catchment, and can a destination be consolidated across orders from different customers?
+3. Is a delivery stop keyed by a normalized address, or is every order delivery its own stop even when two orders share a building?
+4. Who performs the packing and cross-merchant consolidation: each merchant separately, a hub, or drivers at pickup?
+5. What is the required scan/check process for each package when it is picked up and loaded into a van?
+6. Can a route be dispatched if some merchant lines are missing, or must every line be ready first?
+7. When an item is missing/returned, who records it, who approves the outcome, and what evidence is required?
+8. Which merchant lines can settle after a run when other lines on the same order are disputed?
+9. What is the source of truth for driver identity and onboarding today, and what minimum driver details must the marketplace retain?
+10. Should van assignment be recorded in the marketplace admin interface in the MVP, kept in an external operations sheet/system, or left entirely manual? The founder currently favours avoiding a complex fleet feature.
+11. What review target is required at launch: merchant only, product only, or both?
+12. Is ten-mile coverage a straight-line radius from each town centre, and how should overlapping catchments be resolved?
+
+### 16.11 Recommended next architecture artefact
+
+Before schema changes, produce a domain relationship diagram and a separate state/lifecycle diagram. The relationship diagram should show Customer, Address, Order, Order Line, Merchant, Product/Stock, Merchant Fulfilment, Delivery Stop, Route/Run, Driver Assignment, optional Vehicle Reference, Payment, Refund, Merchant Settlement/Payout, Dispute and Review. The lifecycle diagram should show order/payment, item fulfilment, route/stop, and financial settlement as separate but linked state machines.
+
+**Implementation guardrail:** This is planning documentation only. Continue repository/schema/RPC review read-only. Do not apply migrations, alter existing schema, or wire new screens until the entity boundaries, key relationships, lifecycle states and open business rules have been reviewed and agreed.
