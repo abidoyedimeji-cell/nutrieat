@@ -892,3 +892,33 @@ The sample week is a useful scenario fixture, but it is not yet an executable di
 - What minimum van assignment/load manifest must be recorded in the MVP if vehicle/fleet management is external?
 
 **Guardrail:** The companion blueprint is conceptual. No application code, database migrations, schema changes, RPCs or production data were changed in this planning update.
+
+
+---
+
+## 20. Merchant onboarding, CSV imports, priority checks and customer credit — founder requirements
+
+See the detailed engineering blueprint in [MARKETPLACE-WIREFRAMES-AND-WIRING.md](./MARKETPLACE-WIREFRAMES-AND-WIRING.md).
+
+### Captured direction
+- Separate a merchant business from its physical locations. One business may have several branches, each with its own address, contact/hours, service eligibility and stock source.
+- Collect applicant first/last name, phone, country and time zone first; verify phone. Use postcode lookup for address assistance, Companies House for registered-business/director matching where applicable, and the proposed OneID provider for identity checks.
+- If the applicant cannot be matched to the business/directors, route to manual verification using an authoritative business contact. Do not automatically approve/reject on an inconclusive match or disclose applicant details to an unverified contact.
+- Business/identity approval, catalogue access, merchant go-live and Stripe Connect payout readiness are separate gates.
+- Merchants may upload CSVs with different headers. Offer suggested column mapping, manual remapping, ignore, and approved custom attributes. Show row errors and an old-to-new stock preview; uploading alone must never change live inventory.
+- Use platform-controlled categories. Price is required and stored as integer pence. Quantity, unit/pack size and fulfilling location must be unambiguous. Draft listings may lack images; proposed rule is to require a valid image before publication unless an explicit category exception is approved.
+- Priority delivery and priority check are different services: delivery is order/route-level; check is item-level and requires merchant pre-dispatch evidence plus driver pickup evidence. The customer can add issue notes and multiple attachments on an individual item.
+- A customer item issue should be reviewed with evidence and merchant response. The proposed remedy is marketplace/platform credit to the customer, separate from merchant settlement adjustments and from any Stripe refund.
+- Replacement/rescheduling may be offered only when stock, customer consent, slot capacity and route feasibility are confirmed; otherwise use approved platform credit/refund rules.
+
+### Engineering safeguards and unresolved decisions
+1. CSV uploads must stage, parse, validate, preview and require confirmation before apply. Custom columns are typed attributes, never arbitrary database schema. Recommended re-upload behaviour is setting absolute stock quantity, not incrementing it.
+2. Verify the current schema before adding tables. Reuse existing merchant stock import staging, evidence, item issue, issue-evidence and settlement models where they already satisfy the requirement.
+3. Audit whether a business/location table already exists before proposing a new one; each listing must resolve to the branch that fulfils it.
+4. Add a separate customer-credit ledger only if an equivalent does not exist. It must be append-only/audited and must not be conflated with merchant payout adjustments.
+5. Keep verification payloads/identity documents restricted; prefer provider references and outcomes over storing raw identity data. Storage permissions for evidence must match database role/ownership rules.
+6. Confirm priority-check pricing, required photo points, item eligibility, who adjudicates disputes, evidence threshold, credit amount/expiry/reversal, fee treatment, and when a merchant settlement is held or adjusted.
+7. Define replacement policy and ensure the new stock reservation/pickup/route can be scheduled before offering a replacement. Do not silently substitute another merchant/product.
+8. Role checks belong in both RLS and server-side RPC/actions. Test customer-owned orders, merchant isolation across businesses/locations, assigned-driver-only routes, support/operations actions and finance-only money actions.
+
+**Status:** requirements and recommended patterns recorded for planning; no migrations, application code, provider integrations or production data changed by this entry.
