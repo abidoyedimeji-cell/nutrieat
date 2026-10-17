@@ -373,3 +373,113 @@ The three-day lead time can provide operational time to confirm merchant readine
 10. Add RLS/RPC integration tests for customer, merchant A vs merchant B, driver, operations and finance roles.
 
 **Guardrail:** this document is an outline to align product, design and engineering. It does not authorise production migrations or imply any of the named operations already exist. The canonical technical specification remains the schema/state-machine source of truth until the decision register and architecture are deliberately updated.
+
+
+---
+
+## New founder requirements — merchant onboarding, catalogue imports, item checks and credits
+
+This section captures planning direction from the latest product discussion. It adds requirements and proposed implementation details; it does not claim the current app supports them. Unsettled rules remain decisions, not assumed facts.
+
+### 1. Merchant onboarding gates and business/location model
+
+Separate the legal/trading business from each physical trading location:
+- **Business / merchant account:** legal/trading identity, verification state, business type, primary contact, Companies House match where applicable, Stripe Connect account and payout status.
+- **Merchant location:** one or more branches/outlets belonging to the business, each with its own address, postcode, location contact, operating/collection hours, service-area eligibility and stock availability.
+- A franchise or multi-branch business should not need a duplicate legal merchant account for every branch. Each listing and stock record must still identify the location that fulfils it.
+
+Proposed onboarding sequence:
+1. Collect applicant first name, last name, phone, country and time zone; verify phone before sensitive onboarding steps.
+2. Collect business/trading name, business type, contact details and location(s).
+3. Use the postcode lookup API to help resolve addresses; treat its result as a suggestion for the applicant to confirm, not identity proof.
+4. For registered businesses, query Companies House and compare supplied identity against business/director records where legally appropriate. Mismatch or inconclusive match means manual review, not automatic approval/rejection.
+5. If the applicant cannot be matched, collect an authoritative business email and queue verification. Do not disclose sensitive applicant details to an unrelated existing account/email. Notify a verified business contact with minimal information and anti-enumeration protections.
+6. Use the proposed OneID provider for identity verification. Store provider reference, outcome and limited audit metadata—not raw ID images or full verification payloads unless a documented lawful need requires them.
+7. Review business/supplier agreements and operational readiness.
+8. After verification and approval, enable catalogue creation/import. Publishing is a separate action with separate validation.
+9. Stripe Connect onboarding/payout readiness is independent from identity/business verification. Passing OneID or Companies House checks alone must not make a merchant payout-ready.
+
+Potential statuses: draft, submitted, phone_verified, identity_pending, business_review, approved, catalogue_enabled, live, needs_information, rejected, suspended and payouts_blocked. Align with existing enums before migrations.
+
+### 2. CSV stock/catalogue import: map, validate, preview, apply
+
+Merchant CSVs will have different headers. Do not require merchants to provide the marketplace's exact column names.
+
+Canonical fields proposed:
+- Product/listing name (required)
+- Price in GBP, stored as integer pence (required)
+- Quantity in stock (required for stock-managed listings)
+- Unit/pack size where needed (e.g. 30 eggs, 1 kg, 500 g, 1 L, case of 12 × 1 L)
+- Description (optional)
+- Primary category selected from platform-controlled categories
+- Additional structured attributes (optional, typed and approved)
+- Image (optional for draft; proposed required before publishing, with any exception explicitly approved)
+- Merchant location/fulfilment source (required for multi-location businesses)
+
+Import flow:
+1. Upload CSV to a private staging location.
+2. Parse and show source headers and sample values.
+3. Suggest mappings from synonyms (e.g. grams, weight, qty, litres), but require confirmation for ambiguous fields.
+4. Let the merchant map a source column to a canonical field, ignore it, or map it to an approved custom attribute.
+5. Validate units, prices, required fields, categories, duplicate listings, location, quantities and image references. Show row-level errors and warnings.
+6. Preview create/update/skip actions and old quantity → new quantity. Upload alone must never change live stock.
+7. Require explicit confirmation by an authorised merchant user. Apply the batch atomically or in resumable, idempotent chunks with a clear result.
+8. Record mapping version, file checksum/reference, row counts, actor, validation errors and outcome. Retain raw files only as long as necessary.
+
+Custom columns must not become arbitrary database columns or executable schema. Store them as typed attributes (e.g. governed JSONB attributes or an approved attribute table). Only attributes with defined types, validation, privacy classification and indexing/filtering rules may become public filters. Unrelated or unsafe columns should be ignored.
+
+Recommended default for re-uploaded stock is **set absolute quantity**, not add a delta; show old → new quantity and require confirmation. Deduplicate with stable listing IDs/SKUs where available; do not overwrite listings based only on a potentially ambiguous product name.
+
+### 3. Listing images and publication
+
+Allow draft listings without an image. Recommended rule: require at least one valid image before publishing, unless operations explicitly enables a category-specific exception. Validate actual file type/signature and size, use safe storage policies, remove metadata where appropriate, and never trust filenames. Keep image upload separate from stock imports in the first version unless image matching is deliberately designed. Use one primary category; additional tags/attributes may be multi-select where taxonomy rules permit.
+
+### 4. Distinguish two different priority services
+
+**Priority delivery** is an order/delivery booking and route-level service/fee. It applies once to the combined customer delivery/order, not separately to each merchant. It requires a defined time window, capacity, eligibility and routing commitment.
+
+**Priority check** is an item-level paid quality/evidence service, not faster delivery. For each item with priority check:
+- Merchant records the pre-dispatch check and photos.
+- Driver records pickup/load condition photos.
+- At delivery, the customer may accept or raise an item issue with reason, notes and multiple attachments.
+- Evidence is attached to the item, immutable/versioned, and cannot be edited by another role.
+- Record uploader, role, timestamps and access scope.
+
+Never reuse one priority boolean for both. Model order-level booking type/slot separately from an item-level priority-check flag, price snapshot and evidence/check status. Exact price, photo requirements, eligibility and refund policy remain open.
+
+### 5. Item disputes, merchant response and platform credit
+
+Customers may reject a specific item or quantity without rejecting the entire order. Capture customer reason/note/attachments, affected quantity, item/order/merchant references, merchant check evidence, driver pickup evidence, merchant response, operations decision and audit history.
+
+A dispute does not automatically prove fault. Evidence is reviewed under a defined policy. The proposed outcome is **marketplace/platform credit to the customer**, not credit paid to the merchant and not necessarily a card refund. Keep separate:
+- **Customer credit ledger:** liability owed to the customer, in pence, with source issue/order and issued/redeemed/reversed entries.
+- **Merchant settlement adjustment:** whether and how the disputed value reduces or holds a merchant payout.
+- **Stripe refund:** actual money returned to the original payment method if policy chooses this instead or additionally.
+
+Never represent platform credit as merchant credit, or silently reduce a merchant payout because an issue was merely opened. Define approval authority, evidence threshold, credit amount, expiry, reversal and fee treatment before implementation. Platform credit is a reasonable proposed default when evidence confirms the delivered item materially differed from the listing/check, but adjudication and liability rules need approval.
+
+### 6. Replacement and rescheduling
+
+Offer replacement only if a comparable listing is available and the customer agrees to the replacement and price. Never silently substitute another product or merchant. Replacement from another merchant requires a new stock reservation and may need a new pickup/route task. If it cannot fit the existing run, default to platform credit or an approved refund rather than promising an unschedulable redelivery. Rescheduling requires customer consent, slot-capacity checks, notifications and a new route assignment. The MVP may coordinate physical returns/replacements manually while recording the issue, decision, evidence, credit/refund and return task.
+
+### 7. Proposed table/field families — audit before adding
+
+Reuse existing architecture tables where possible:
+- Business and branches: merchants as business entity plus merchant_locations (or existing equivalent).
+- Onboarding: application/verification status, provider references and restricted verification event log; keep sensitive provider payloads out of merchant-readable tables.
+- Import: reuse merchant_stock_imports.column_mapping and merchant_stock_import_rows; add governed attribute definitions only if no existing model supports them.
+- Priority check: item-level flag/status and price snapshot; use evidence_media and issue evidence links, not image blobs in order rows.
+- Disputes: reuse item_issues, issue_evidence, support cases and audit events.
+- Customer platform credit: append-only customer_credit_ledger and redemption/adjustment operations if no equivalent exists.
+- Merchant money: reuse settlement/adjustment/transfer ledgers; never conflate them with customer credit.
+
+### 8. Role boundaries to design and test
+
+- **Customer:** read public listings; manage own baskets/orders; submit own item acceptance/issues and evidence; view own credit ledger.
+- **Merchant owner/staff:** manage only assigned business/location listings and stock; act on their own sub-orders; upload merchant check evidence; respond to issues for their items; view their settlements. Cannot see other merchants' customers, stock, evidence or payouts.
+- **Driver:** see assigned routes/stops and minimum customer data; upload pickup/delivery evidence; record outcomes. Cannot set prices, alter stock, adjudicate disputes or initiate payouts.
+- **Operations/support:** review onboarding, imports, issues, evidence and scheduling exceptions under explicit permissions; high-risk actions require reasons and audit records.
+- **Finance:** inspect/reconcile settlements and issue approved credits/refunds within explicit permissions; cannot alter verification evidence or stock silently.
+- **Service role/webhooks:** provider reconciliation only, idempotent and never exposed to browser clients.
+
+RLS is necessary but not sufficient: each RPC/server action must independently validate actor, resource ownership, state transition and quantity. Storage policies must enforce the same order/item/merchant boundaries as database rows.
