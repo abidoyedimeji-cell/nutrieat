@@ -291,3 +291,26 @@ architecture §14.5.
 
 *No marketplace code should begin until the 🔴 items for the level being built are answered.
 Level A can proceed once D-A1 and D-A4 are decided; everything else in §5 has a safe default.*
+
+
+---
+
+## Founder discussion additions — pending decisions
+
+These additions capture requirements discussed after the existing decision register was written. They are not marked as approved implementation choices until the relevant policy is confirmed.
+
+| Topic | Current direction | Decision still required |
+|---|---|---|
+| Merchant business vs branch | One business can operate multiple locations | Confirm canonical entity/location model and which branch owns each listing and stock balance |
+| CSV imports | Header mapping, custom approved attributes, validation and preview before apply | Define allowed units/decimal quantities, SKU/deduplication strategy, absolute-stock update behaviour and file-retention policy |
+| Product images | Draft may lack image; likely require image before publication | Decide category exceptions and image moderation requirements |
+| Identity and business verification | Phone verification, Companies House match where applicable, proposed OneID check, manual review for mismatches | Approve provider, legal basis, retention, escalation path and what constitutes a verified authoritative business contact |
+| Priority delivery | Booking/route-level service | Reconcile fee, capacity and current lead-time rules with canonical spec |
+| Priority check | Separate paid item-level service with merchant and driver evidence | Set price, eligible categories, required evidence points, disclosure to customer and refund policy |
+| Item disputes | Item/quantity-level issue with customer attachments and merchant response | Define adjudication authority, evidence threshold, SLA, liability and merchant settlement hold/adjustment policy |
+| Customer remedy | Proposed marketplace credit to customer | Define amount, expiry, eligible uses, reversal/appeal and whether card refunds are alternatives or exceptions |
+| Replacement/rescheduling | Only if customer agrees and stock/route capacity can support it | Decide MVP availability and fallback when a replacement cannot fit the existing route |
+| Customer-credit ledger | Separate from merchant settlement and Stripe refund records | Audit existing tables before adding an append-only customer credit ledger |
+| Access control | RLS plus server-side role/resource checks | Test cross-merchant/location isolation, driver assignment scope, evidence storage and finance/support permissions |
+
+The detailed flow and recommended schema reuse are documented in [MARKETPLACE-WIREFRAMES-AND-WIRING.md](./MARKETPLACE-WIREFRAMES-AND-WIRING.md). Do not implement new tables until existing migrations and table specifications have been reconciled.
